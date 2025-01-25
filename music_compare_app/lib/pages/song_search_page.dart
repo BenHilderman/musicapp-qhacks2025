@@ -48,12 +48,44 @@ class _SongSearchPageState extends State<SongSearchPage> {
     return Scaffold(
       backgroundColor: darkBackground,
       appBar: AppBar(
-        backgroundColor: darkCard,
-        title: Text(
-          'Search Albums',
-          style: TextStyle(color: textColor),
+        backgroundColor: Color(0xFF282828), // Spotify grey background
+        centerTitle: true, // Center the content
+        title: Row(
+          mainAxisAlignment:
+              MainAxisAlignment.center, // Center the content in the row
+          mainAxisSize: MainAxisSize.min, // Shrink the row to fit the content
+          children: [
+            Image.asset(
+              'assets/logo.png', // Path to your image asset
+              width: 50, // Larger size for better visibility
+              height: 50,
+            ),
+            SizedBox(width: 10), // Spacing between the logo and text
+            RichText(
+              text: TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Spotter', // The first part of the text
+                    style: TextStyle(
+                      color: Colors.white, // White text for contrast
+                      fontWeight: FontWeight.bold,
+                      fontSize: 24, // Larger font size
+                    ),
+                  ),
+                  TextSpan(
+                    text: 'Box', // The word "Box"
+                    style: TextStyle(
+                      color: Color(0xFF1DB954), // Spotify green for "Box"
+                      fontWeight: FontWeight.bold,
+                      fontSize: 24, // Match the font size of "Spotter"
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        iconTheme: IconThemeData(color: textColor),
+        iconTheme: IconThemeData(color: Colors.white), // White icons
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),

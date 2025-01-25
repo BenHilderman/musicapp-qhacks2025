@@ -73,8 +73,44 @@ class _SongSwipePageState extends State<SongSwipePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Swipe Through Songs"),
-        backgroundColor: Colors.black, // Spotify black
+        backgroundColor: Color(0xFF282828), // Spotify grey background
+        centerTitle: true, // Center the content
+        title: Row(
+          mainAxisAlignment:
+              MainAxisAlignment.center, // Center the content in the row
+          mainAxisSize: MainAxisSize.min, // Shrink the row to fit the content
+          children: [
+            Image.asset(
+              'assets/logo.png', // Path to your image asset
+              width: 50, // Larger size for better visibility
+              height: 50,
+            ),
+            SizedBox(width: 10), // Spacing between the logo and text
+            RichText(
+              text: TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Spotter', // The first part of the text
+                    style: TextStyle(
+                      color: Colors.white, // White text for contrast
+                      fontWeight: FontWeight.bold,
+                      fontSize: 24, // Larger font size
+                    ),
+                  ),
+                  TextSpan(
+                    text: 'Box', // The word "Box"
+                    style: TextStyle(
+                      color: Color(0xFF1DB954), // Spotify green for "Box"
+                      fontWeight: FontWeight.bold,
+                      fontSize: 24, // Match the font size of "Spotter"
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        iconTheme: IconThemeData(color: Colors.white), // White icons
       ),
       body: isLoading
           ? Center(child: CircularProgressIndicator()) // Show loading spinner

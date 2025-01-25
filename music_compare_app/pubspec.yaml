@@ -29,9 +29,7 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/song1.jpg
-    - assets/song2.jpg
-    - assets/song3.jpg
+    - assets/
     # Add any other assets you need here
 
   # Uncomment and add custom fonts if you are using any

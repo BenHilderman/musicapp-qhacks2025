@@ -62,11 +62,45 @@ class _ProfilePageState extends State<ProfilePage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Profile'),
-        backgroundColor: Color(0xFF282828), // Subtle Spotify dark grey
+        backgroundColor: Color(0xFF282828), // Spotify grey background
+        centerTitle: true, // Center the logo and text
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center, // Center the content
+          mainAxisSize: MainAxisSize.min, // Shrink the row to content width
+          children: [
+            Image.asset(
+              'assets/logo.png', // Replace with your actual logo path
+              height: 50, // Adjust logo size
+              width: 50,
+            ),
+            SizedBox(width: 10), // Spacing between logo and text
+            RichText(
+              text: TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Spotter', // First part of the name
+                    style: TextStyle(
+                      color: Colors.white, // Spotify white for contrast
+                      fontSize: 24, // Larger text
+                      fontWeight: FontWeight.bold, // Bold for emphasis
+                    ),
+                  ),
+                  TextSpan(
+                    text: 'Box', // Second part in Spotify green
+                    style: TextStyle(
+                      color: Color(0xFF1DB954), // Spotify green for "Box"
+                      fontSize: 24, // Larger text
+                      fontWeight: FontWeight.bold, // Bold for emphasis
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Color(0xFF1DB954), // Spotify green for active tab
+          indicatorColor: Colors.white, // White underline for active tab
           labelColor: Colors.white, // White text for active tab
           unselectedLabelColor:
               Colors.grey[400], // Light grey for inactive tabs
