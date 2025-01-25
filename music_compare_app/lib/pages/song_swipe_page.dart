@@ -139,7 +139,3 @@ class _SongSwipePageState extends State<SongSwipePage> {
     );
   }
 }
-
-extension on SpotifyAPI {
-  fetchTracksFromPlaylist(String playlistId) {}
-}

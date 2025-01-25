@@ -27,6 +27,33 @@ class SpotifyAPI {
     }
   }
 
+  // Fetch tracks from a playlist by ID
+  Future<List<Map<String, String>>> fetchTracksFromPlaylist(
+      String playlistId) async {
+    final accessToken = await _getAccessToken();
+
+    final response = await http.get(
+      Uri.parse('https://api.spotify.com/v1/playlists/$playlistId/tracks'),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      final items = data['items'] as List;
+
+      return items.map((item) {
+        final track = item['track'];
+        return {
+          'title': track['name'] as String,
+          'artist': (track['artists'] as List)[0]['name'] as String,
+          'image': (track['album']['images'] as List)[0]['url'] as String,
+        };
+      }).toList();
+    } else {
+      throw Exception('Failed to fetch tracks from playlist: ${response.body}');
+    }
+  }
+
   // Search for albums based on a query (album name or artist)
   Future<List<Map<String, String>>> searchAlbums(String query) async {
     final accessToken = await _getAccessToken();
