@@ -97,6 +97,43 @@ class SpotifyAuthServiceMobile implements SpotifyAuthService {
     print('User Profile: $_userProfile');
   }
 
+  Future<List<Map<String, dynamic>>> searchSpotify({
+    required String query,
+    required String type,
+    int limit = 10,
+  }) async {
+    if (_accessToken == null) {
+      throw Exception('Access token is null. Cannot search Spotify.');
+    }
+
+    final response = await http.get(
+      Uri.parse(
+          'https://api.spotify.com/v1/search?q=$query&type=$type&limit=$limit'),
+      headers: {
+        'Authorization': 'Bearer $_accessToken',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return (data['tracks']['items'] as List).map((item) {
+        final track = item;
+        return {
+          'id': track['id'],
+          'title': track['name'],
+          'artist': (track['artists'] as List)
+              .map((artist) => artist['name'])
+              .join(', '),
+          'image': track['album']['images']?.isNotEmpty == true
+              ? track['album']['images'][0]['url']
+              : '',
+        };
+      }).toList();
+    } else {
+      throw Exception('Failed to search Spotify: ${response.body}');
+    }
+  }
+
   @override
   Future<void> fetchUserPlaylists() async {
     if (_accessToken == null) {

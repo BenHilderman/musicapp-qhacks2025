@@ -1,87 +1,71 @@
 import 'package:flutter/material.dart';
-import '../services/spotify_auth_service.dart';
+import 'package:flutter_card_swiper/flutter_card_swiper.dart';
+import '../services/api_helper.dart'; // Spotify API helper
+import '../widgets/song_card.dart'; // Custom SongCard widget
 
 class SongSwipePage extends StatefulWidget {
-  final SpotifyAuthService spotifyAuthService;
-
-  SongSwipePage({required this.spotifyAuthService});
-
   @override
   _SongSwipePageState createState() => _SongSwipePageState();
 }
 
-class _SongSwipePageState extends State<SongSwipePage> with SingleTickerProviderStateMixin {
-  List<String> songs = []; // Replace with actual song data
-  int currentIndex = 0;
-  Offset position = Offset.zero;
-  AnimationController? _animationController;
-  Animation<Offset>? _animation;
+class _SongSwipePageState extends State<SongSwipePage> {
+  final SpotifyAPI spotifyAPI = SpotifyAPI(); // API instance
+  List<Map<String, String>> songs = []; // List of songs
+  bool isLoading = true; // Loading indicator
+  final String playlistId = '3fxxZwjRv8M0NczIFykCc8'; // Playlist ID
+
+  // Variables to manage animations
+  bool showLikeAnimation = false;
+  bool showDislikeAnimation = false;
 
   @override
   void initState() {
     super.initState();
-    _fetchSongs();
-    _animationController = AnimationController(vsync: this, duration: Duration(milliseconds: 500));
+    _loadSongs(); // Load songs on page initialization
   }
 
-  Future<void> _fetchSongs() async {
-    // Fetch songs from Spotify or other sources
-    List<String> fetchedSongs = await widget.spotifyAuthService.fetchSongs();
-    setState(() {
-      songs = fetchedSongs;
-    });
-  }
+  /// Fetch songs from the specified playlist
+  Future<void> _loadSongs() async {
+    try {
+      setState(() {
+        isLoading = true;
+      });
 
-  @override
-  void dispose() {
-    _animationController?.dispose();
-    super.dispose();
-  }
-
-  void _handleSwipe(DragUpdateDetails details) {
-    setState(() {
-      position += details.delta;
-    });
-  }
-
-  void _endSwipe(DragEndDetails details) {
-    if (position.dx > 100) {
-      _handleSongLiked(songs[currentIndex]);
-    } else if (position.dx < -100) {
-      _handleSongDisliked(songs[currentIndex]);
-    } else {
-      _resetPosition();
+      // Fetch songs from the specified playlist
+      final fetchedSongs = await spotifyAPI.fetchTracksFromPlaylist(playlistId);
+      setState(() {
+        songs = fetchedSongs;
+        isLoading = false;
+      });
+    } catch (e) {
+      print("Error loading songs: $e");
+      setState(() {
+        isLoading = false;
+      });
     }
   }
 
-  void _resetPosition() {
-    _animation = _animationController!.drive(
-      Tween(begin: position, end: Offset.zero),
-    );
-    _animationController!.reset();
-    _animationController!.forward();
-    _animationController!.addListener(() {
+  // Show Like animation
+  void _showLikeAnimation() {
+    setState(() {
+      showLikeAnimation = true;
+    });
+    Future.delayed(Duration(seconds: 1), () {
       setState(() {
-        position = _animation!.value;
+        showLikeAnimation = false;
       });
     });
   }
 
-  void _handleSongLiked(String song) {
-    // Handle song liked logic
-    print('Liked: $song');
+  // Show Dislike animation
+  void _showDislikeAnimation() {
     setState(() {
-      currentIndex++;
-      position = Offset.zero;
+      showDislikeAnimation = true;
     });
-  }
-
-  void _handleSongDisliked(String song) {
-    // Handle song disliked logic
-    print('Disliked: $song');
-    setState(() {
-      currentIndex++;
-      position = Offset.zero;
+    Future.delayed(Duration(seconds: 1), () {
+      setState(() {
+        showDislikeAnimation = false;
+      });
     });
   }
 
@@ -89,35 +73,73 @@ class _SongSwipePageState extends State<SongSwipePage> with SingleTickerProvider
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Swipe Songs'),
+        title: Text("Swipe Through Songs"),
+        backgroundColor: Colors.black, // Spotify black
       ),
-      body: songs.isEmpty
-          ? Center(child: CircularProgressIndicator())
-          : Stack(
-              children: songs.asMap().entries.map((entry) {
-                int index = entry.key;
-                String song = entry.value;
-                if (index < currentIndex) return Container();
-                return Positioned(
-                  top: 0,
-                  bottom: 0,
-                  left: position.dx,
-                  right: -position.dx,
-                  child: GestureDetector(
-                    onPanUpdate: _handleSwipe,
-                    onPanEnd: _endSwipe,
-                    child: Transform.rotate(
-                      angle: position.dx * 0.003,
-                      child: Card(
-                        child: Center(
-                          child: Text(song), // Replace with song details
+      body: isLoading
+          ? Center(child: CircularProgressIndicator()) // Show loading spinner
+          : songs.isEmpty
+              ? Center(child: Text("No songs found")) // Handle empty results
+              : Center(
+                  child: Stack(
+                    children: [
+                      Container(
+                        height: 500,
+                        padding: EdgeInsets.all(16.0),
+                        child: CardSwiper(
+                          cards: songs.map((song) {
+                            return SongCard(
+                              title: song['title'] ?? "Unknown Title",
+                              artist: song['artist'] ?? "Unknown Artist",
+                              image: song['image'] ??
+                                  "", // Placeholder for missing images
+                            );
+                          }).toList(),
+                          onSwipe: (index, direction) {
+                            if (direction == CardSwiperDirection.top ||
+                                direction == CardSwiperDirection.right) {
+                              // Like action (swipe up)
+                              print("Liked: ${songs[index]['title']}");
+                              _showLikeAnimation();
+                            } else if (direction ==
+                                    CardSwiperDirection.bottom ||
+                                direction == CardSwiperDirection.left) {
+                              // Dislike action (swipe down)
+                              print("Disliked: ${songs[index]['title']}");
+                              _showDislikeAnimation();
+                            }
+                          },
+                          scale: 0.9, // Slight scaling for cards
+                          padding: EdgeInsets.symmetric(horizontal: 20),
                         ),
                       ),
-                    ),
+                      if (showLikeAnimation)
+                        Positioned(
+                          top: 100,
+                          left: MediaQuery.of(context).size.width / 2 - 50,
+                          child: Icon(
+                            Icons.favorite,
+                            color: Colors.green,
+                            size: 100,
+                          ),
+                        ),
+                      if (showDislikeAnimation)
+                        Positioned(
+                          top: 100,
+                          left: MediaQuery.of(context).size.width / 2 - 50,
+                          child: Icon(
+                            Icons.clear,
+                            color: Colors.red,
+                            size: 100,
+                          ),
+                        ),
+                    ],
                   ),
-                );
-              }).toList(),
-            ),
+                ),
     );
   }
+}
+
+extension on SpotifyAPI {
+  fetchTracksFromPlaylist(String playlistId) {}
 }

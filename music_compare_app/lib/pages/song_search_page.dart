@@ -14,6 +14,12 @@ class _SongSearchPageState extends State<SongSearchPage> {
 
   final SpotifyAPI spotifyAPI = SpotifyAPI(); // Spotify API instance
 
+  // Spotify color palette
+  final Color spotifyGreen = Color(0xFF1DB954);
+  final Color darkBackground = Color(0xFF191414);
+  final Color darkCard = Color(0xFF282828);
+  final Color textColor = Colors.white;
+
   // Function to search for albums
   Future<void> searchAlbums(String query) async {
     if (query.isEmpty) return; // Don't search if the query is empty
@@ -40,8 +46,14 @@ class _SongSearchPageState extends State<SongSearchPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: darkBackground,
       appBar: AppBar(
-        title: Text('Search Albums'),
+        backgroundColor: darkCard,
+        title: Text(
+          'Search Albums',
+          style: TextStyle(color: textColor),
+        ),
+        iconTheme: IconThemeData(color: textColor),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -50,11 +62,19 @@ class _SongSearchPageState extends State<SongSearchPage> {
             // Search input
             TextField(
               controller: searchController,
+              style: TextStyle(color: textColor),
               decoration: InputDecoration(
+                filled: true,
+                fillColor: darkCard,
                 labelText: 'Search for an album',
+                labelStyle: TextStyle(color: textColor),
                 suffixIcon: IconButton(
-                  icon: Icon(Icons.search),
+                  icon: Icon(Icons.search, color: spotifyGreen),
                   onPressed: () => searchAlbums(searchController.text),
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
                 ),
               ),
             ),
@@ -62,7 +82,9 @@ class _SongSearchPageState extends State<SongSearchPage> {
 
             // Display results
             isLoading
-                ? Center(child: CircularProgressIndicator()) // Show loading spinner
+                ? Center(
+                    child: CircularProgressIndicator(
+                        color: spotifyGreen)) // Show loading spinner
                 : Expanded(
                     child: ListView.builder(
                       itemCount: searchResults.length,
@@ -74,27 +96,42 @@ class _SongSearchPageState extends State<SongSearchPage> {
                         final albumArtist = album['artist'];
                         final albumImage = album['image'];
 
-                        return ListTile(
-                          contentPadding: EdgeInsets.symmetric(vertical: 10),
-                          leading: Image.network(
-                            albumImage!,
-                            width: 50,
-                            height: 50,
-                            fit: BoxFit.cover,
+                        return Card(
+                          color: darkCard,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          title: Text(albumTitle!),
-                          subtitle: Text(albumArtist!),
-                          onTap: () {
-                            // Navigate to the album detail page
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => AlbumDetailPage(
-                                  albumId: album['id']!, // Pass album ID to details page
+                          child: ListTile(
+                            contentPadding: EdgeInsets.symmetric(
+                                vertical: 10, horizontal: 16),
+                            leading: Image.network(
+                              albumImage!,
+                              width: 50,
+                              height: 50,
+                              fit: BoxFit.cover,
+                            ),
+                            title: Text(
+                              albumTitle!,
+                              style: TextStyle(color: textColor),
+                            ),
+                            subtitle: Text(
+                              albumArtist!,
+                              style:
+                                  TextStyle(color: textColor.withOpacity(0.7)),
+                            ),
+                            onTap: () {
+                              // Navigate to the album detail page
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => AlbumDetailPage(
+                                    albumId: album[
+                                        'id']!, // Pass album ID to details page
+                                  ),
                                 ),
-                              ),
-                            );
-                          },
+                              );
+                            },
+                          ),
                         );
                       },
                     ),

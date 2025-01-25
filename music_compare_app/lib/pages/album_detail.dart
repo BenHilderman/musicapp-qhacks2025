@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flip_card/flip_card.dart'; // Import the FlipCard package
 import '../services/api_helper.dart'; // Spotify API helper
 
 class AlbumDetailPage extends StatefulWidget {
@@ -11,29 +12,40 @@ class AlbumDetailPage extends StatefulWidget {
 }
 
 class _AlbumDetailPageState extends State<AlbumDetailPage> {
-  Map<String, dynamic>? albumDetails; // Nullable variable to store album details
-
+  Map<String, dynamic>? albumDetails;
   bool isLoading = true;
 
+  int production = 50;
+  int lyrics = 50;
+  int flow = 50;
+  int intangibles = 50;
+
+  double averageRating = 75.0; // Placeholder for average rating from others
   final SpotifyAPI spotifyAPI = SpotifyAPI();
+
+  final Color spotifyGreen = Color(0xFF1DB954);
+  final Color darkBackground = Color(0xFF191414);
+  final Color darkCard = Color(0xFF282828);
+  final Color textColor = Colors.white;
+
+  double get totalRating => (production + lyrics + flow + intangibles) / 4.0;
 
   @override
   void initState() {
     super.initState();
-    fetchAlbumDetails(widget.albumId); // Fetch album details on page load
+    fetchAlbumDetails(widget.albumId);
   }
 
   Future<void> fetchAlbumDetails(String albumId) async {
     try {
       setState(() {
-        isLoading = true; // Show loading spinner
+        isLoading = true;
       });
 
-      // Fetch album details from the Spotify API
       final details = await spotifyAPI.fetchAlbumDetails(albumId);
       setState(() {
-        albumDetails = details; // Store the details
-        isLoading = false; // Hide loading spinner
+        albumDetails = details;
+        isLoading = false;
       });
     } catch (e) {
       setState(() {
@@ -46,67 +58,191 @@ class _AlbumDetailPageState extends State<AlbumDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: darkBackground,
       appBar: AppBar(
-        title: Text(albumDetails?['name'] ?? 'Album Details'), // Handle null safely
+        backgroundColor: darkCard,
+        title: Text(
+          albumDetails?['name'] ?? 'Album Details',
+          style: TextStyle(color: textColor),
+        ),
+        iconTheme: IconThemeData(color: textColor),
       ),
       body: isLoading
-          ? Center(child: CircularProgressIndicator()) // Show loading spinner
+          ? Center(child: CircularProgressIndicator(color: spotifyGreen))
           : albumDetails == null
-              ? Center(child: Text("Album not found")) // Handle null album details
+              ? Center(
+                  child: Text(
+                    "Album not found",
+                    style: TextStyle(color: textColor),
+                  ),
+                )
               : Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: Row(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Display album image, safely checking albumDetails
-                      if (albumDetails!['images'] != null && albumDetails!['images'].isNotEmpty)
-                        Image.network(
-                          albumDetails!['images'][0]['url'],
-                          width: 150,
-                          height: 150,
-                          fit: BoxFit.cover,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (albumDetails!['images'] != null &&
+                              albumDetails!['images'].isNotEmpty)
+                            Image.network(
+                              albumDetails!['images'][0]['url'],
+                              width: 150,
+                              height: 150,
+                              fit: BoxFit.cover,
+                            ),
+                          SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  albumDetails!['name'] ?? 'Unknown',
+                                  style: TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: textColor,
+                                  ),
+                                ),
+                                Text(
+                                  'Released: ${albumDetails!['release_date'] ?? 'Unknown'}',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: textColor.withOpacity(0.7),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        "Tracks:",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                          color: textColor,
                         ),
-                      SizedBox(width: 16),
-                      // Display album details and track list to the right of the album cover
+                      ),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Display album name and release date, with null checks
-                            Text(
-                              albumDetails!['name'] ?? 'Unknown',
-                              style: TextStyle(
-                                fontSize: 24, // Custom font size for album name
-                                fontWeight: FontWeight.bold, // Bold for title
+                        child: ListView.builder(
+                          itemCount: albumDetails!['tracks']['items'].length,
+                          itemBuilder: (context, index) {
+                            final track =
+                                albumDetails!['tracks']['items'][index];
+                            return ListTile(
+                              title: Text(
+                                "${index + 1}. ${track['name']}",
+                                style: TextStyle(color: textColor),
                               ),
-                            ),
-                            Text(
-                              'Released: ${albumDetails!['release_date'] ?? 'Unknown'}',
-                              style: TextStyle(
-                                fontSize: 16, // Custom font size for release date
-                                color: Colors.grey, // Slightly grey for subtitle
-                              ),
-                            ),
-                            SizedBox(height: 16),
-                            // Track list section
-                            Text("Tracks:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
-                            Expanded(
-                              child: ListView.builder(
-                                itemCount: albumDetails!['tracks']['items'].length,
-                                itemBuilder: (context, index) {
-                                  final track = albumDetails!['tracks']['items'][index];
-                                  return ListTile(
-                                    title: Text("${index + 1}. ${track['name']}"),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
+                            );
+                          },
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        'Rate this Album',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
+                      ),
+                      SizedBox(height: 16),
+                      _buildRatingSlider('Production', (value) {
+                        setState(() {
+                          production = value.toInt();
+                        });
+                      }, production),
+                      _buildRatingSlider('Lyrics', (value) {
+                        setState(() {
+                          lyrics = value.toInt();
+                        });
+                      }, lyrics),
+                      _buildRatingSlider('Flow', (value) {
+                        setState(() {
+                          flow = value.toInt();
+                        });
+                      }, flow),
+                      _buildRatingSlider('Intangibles', (value) {
+                        setState(() {
+                          intangibles = value.toInt();
+                        });
+                      }, intangibles),
+                      SizedBox(height: 16),
+                      Center(
+                        child: FlipCard(
+                          direction: FlipDirection.HORIZONTAL,
+                          front: _buildRatingCard('Your Rating',
+                              '${totalRating.toStringAsFixed(2)}'),
+                          back: _buildRatingCard('Average Rating',
+                              '${averageRating.toStringAsFixed(2)}'),
                         ),
                       ),
                     ],
                   ),
                 ),
+    );
+  }
+
+  Widget _buildRatingSlider(
+      String label, ValueChanged<double> onChanged, int value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(fontSize: 16, color: textColor),
+        ),
+        Slider(
+          value: value.toDouble(),
+          min: 0,
+          max: 99,
+          divisions: 99,
+          label: value.toString(),
+          activeColor: spotifyGreen,
+          inactiveColor: textColor.withOpacity(0.3),
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRatingCard(String title, String rating) {
+    return Card(
+      color: darkCard,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16.0),
+      ),
+      child: Container(
+        width: 150,
+        height: 100,
+        padding: EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              rating,
+              style: TextStyle(
+                color: spotifyGreen,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

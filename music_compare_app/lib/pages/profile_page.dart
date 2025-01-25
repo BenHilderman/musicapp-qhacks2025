@@ -63,8 +63,13 @@ class _ProfilePageState extends State<ProfilePage>
     return Scaffold(
       appBar: AppBar(
         title: Text('Profile'),
+        backgroundColor: Color(0xFF282828), // Subtle Spotify dark grey
         bottom: TabBar(
           controller: _tabController,
+          indicatorColor: Color(0xFF1DB954), // Spotify green for active tab
+          labelColor: Colors.white, // White text for active tab
+          unselectedLabelColor:
+              Colors.grey[400], // Light grey for inactive tabs
           tabs: [
             Tab(text: 'Overview'),
             Tab(text: 'Likes'),
@@ -77,50 +82,83 @@ class _ProfilePageState extends State<ProfilePage>
   }
 
   Widget _buildProfileContent() {
-    return Column(
-      children: [
-        if (profilePictureUrl != null)
-          CircleAvatar(
-            radius: 50,
-            backgroundImage: NetworkImage(profilePictureUrl!),
-          ),
-        if (profileName != null)
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Text(
-              profileName!,
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+    return Container(
+      color: Color(0xFF191414), // Spotify black background
+      child: Column(
+        children: [
+          if (profilePictureUrl != null)
+            CircleAvatar(
+              radius: 50,
+              backgroundImage: NetworkImage(profilePictureUrl!),
+            ),
+          if (profileName != null)
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                profileName!,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white, // Spotify white text
+                ),
+              ),
+            ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildOverviewTab(),
+                _buildLikesTab(),
+                _buildReviewsTab(),
+              ],
             ),
           ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildOverviewTab(),
-              _buildLikesTab(),
-              _buildReviewsTab(),
-            ],
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildOverviewTab() {
-    return Column(
-      children: [
-        if (followersCount != null)
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (followersCount != null)
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                'Followers: $followersCount',
+                style: TextStyle(color: Colors.grey[400]), // Light grey text
+              ),
+            ),
           Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Text('Followers: $followersCount'),
+            padding:
+                const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+            child: Text(
+              'Following',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[300], // Subtle grey
+              ),
+            ),
           ),
-        Expanded(
-          child: _buildFollowingList(),
-        ),
-        Expanded(
-          child: _buildPlaylistsList(),
-        ),
-      ],
+          _buildFollowingList(),
+          Padding(
+            padding:
+                const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+            child: Text(
+              'Playlists',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey[300], // Subtle grey
+              ),
+            ),
+          ),
+          _buildPlaylistsList(),
+        ],
+      ),
     );
   }
 
@@ -128,7 +166,8 @@ class _ProfilePageState extends State<ProfilePage>
     return Center(
       child: Text(
         'Likes tab content goes here',
-        style: TextStyle(fontSize: 18),
+        style:
+            TextStyle(fontSize: 18, color: Colors.grey[400]), // Light grey text
       ),
     );
   }
@@ -137,48 +176,76 @@ class _ProfilePageState extends State<ProfilePage>
     return Center(
       child: Text(
         'Reviews tab content goes here',
-        style: TextStyle(fontSize: 18),
+        style:
+            TextStyle(fontSize: 18, color: Colors.grey[400]), // Light grey text
       ),
     );
   }
 
   Widget _buildSignInPrompt() {
-    return Center(
-      child: ElevatedButton(
-        onPressed: () async {
-          await widget.signIn();
-          if (widget.isSignedIn) {
-            _fetchProfileData();
-          }
-        },
-        child: Text('Sign in to Spotify'),
+    return Container(
+      color: Color(0xFF191414), // Spotify black background
+      child: Center(
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Color(0xFF1DB954), // Spotify green button
+          ),
+          onPressed: () async {
+            await widget.signIn();
+            if (widget.isSignedIn) {
+              _fetchProfileData();
+            }
+          },
+          child: Text(
+            'Sign in to Spotify',
+            style: TextStyle(color: Colors.black), // Black text for contrast
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildFollowingList() {
-    return ListView.builder(
-      itemCount: following.length,
-      itemBuilder: (context, index) {
-        return ListTile(
-          leading: CircleAvatar(
-            backgroundImage:
-                NetworkImage(following[index]['profilePictureUrl']!),
-          ),
-          title: Text(following[index]['name']!),
-        );
-      },
+    return Container(
+      color: Color(0xFF282828), // Subtle grey background
+      child: ListView.builder(
+        shrinkWrap: true,
+        physics:
+            NeverScrollableScrollPhysics(), // Allow embedding in scroll view
+        itemCount: following.length,
+        itemBuilder: (context, index) {
+          return ListTile(
+            leading: CircleAvatar(
+              backgroundImage:
+                  NetworkImage(following[index]['profilePictureUrl']!),
+            ),
+            title: Text(
+              following[index]['name']!,
+              style: TextStyle(color: Colors.grey[300]), // Lighter grey text
+            ),
+          );
+        },
+      ),
     );
   }
 
   Widget _buildPlaylistsList() {
-    return ListView.builder(
-      itemCount: playlists.length,
-      itemBuilder: (context, index) {
-        return ListTile(
-          title: Text(playlists[index]),
-        );
-      },
+    return Container(
+      color: Color(0xFF282828), // Subtle grey background
+      child: ListView.builder(
+        shrinkWrap: true,
+        physics:
+            NeverScrollableScrollPhysics(), // Allow embedding in scroll view
+        itemCount: playlists.length,
+        itemBuilder: (context, index) {
+          return ListTile(
+            title: Text(
+              playlists[index],
+              style: TextStyle(color: Colors.grey[300]), // Lighter grey text
+            ),
+          );
+        },
+      ),
     );
   }
 }

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:uni_links/uni_links.dart';  // Import uni_links
+import 'package:uni_links/uni_links.dart'; // Import uni_links
 import 'dart:async';
 import 'pages/song_swipe_page.dart';
 import 'pages/song_search_page.dart';
@@ -77,7 +77,7 @@ class _MusicCompareAppState extends State<MusicCompareApp> {
   @override
   Widget build(BuildContext context) {
     List<Widget> _pages = [
-      SongSwipePage(spotifyAuthService: _spotifyAuthService),
+      SongSwipePage(),
       ProfilePage(
         spotifyAuthService: _spotifyAuthService,
         isSignedIn: _isSignedIn,
@@ -89,7 +89,23 @@ class _MusicCompareAppState extends State<MusicCompareApp> {
     return MaterialApp(
       title: 'Music Compare',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        primaryColor: Color(0xFF1DB954), // Spotify green
+        scaffoldBackgroundColor: Colors.black,
+        bottomNavigationBarTheme: BottomNavigationBarThemeData(
+          backgroundColor: Colors.black,
+          selectedItemColor: Color(0xFF1DB954),
+          unselectedItemColor: Colors.white,
+        ),
+        textTheme: TextTheme(
+          bodyLarge: TextStyle(color: Colors.white),
+          bodyMedium: TextStyle(color: Colors.white),
+        ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.black,
+          titleTextStyle: TextStyle(color: Colors.white, fontSize: 20),
+        ),
+        colorScheme:
+            ColorScheme.fromSwatch().copyWith(secondary: Color(0xFF1DB954)),
       ),
       home: Scaffold(
         body: _pages[_selectedIndex],
@@ -109,7 +125,8 @@ class _MusicCompareAppState extends State<MusicCompareApp> {
             ),
           ],
           currentIndex: _selectedIndex,
-          selectedItemColor: Colors.blue,
+          selectedItemColor: Color(0xFF1DB954), // Spotify green
+          unselectedItemColor: Colors.white,
           onTap: _onItemTapped,
         ),
       ),

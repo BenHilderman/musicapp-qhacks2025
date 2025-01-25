@@ -17,6 +17,7 @@ dependencies:
   url_launcher: ^6.0.20
   card_swiper: ^2.0.4
   uni_links: ^0.5.1  # Add this line
+  flip_card: ^0.7.0
   # Add any other dependencies you need here
 
 dev_dependencies:

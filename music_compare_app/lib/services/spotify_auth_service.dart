@@ -1,5 +1,4 @@
-import 'spotify_auth_service_web.dart'
-    if (dart.library.io) 'spotify_auth_service_mobile.dart';
+import 'spotify_auth_service_mobile.dart';
 
 /// Abstract class defining the interface for SpotifyAuthService
 abstract class SpotifyAuthService {
