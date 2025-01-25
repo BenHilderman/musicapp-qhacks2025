@@ -1,16 +1,20 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
-import 'package:url_launcher/url_launcher.dart';  // Import url_launcher
+import 'package:url_launcher/url_launcher.dart'; // Import url_launcher
 import 'spotify_auth_service.dart';
 
 class SpotifyAuthServiceMobile implements SpotifyAuthService {
-  final String _clientId = '2926a194889544cf8a0317a47a5f6722'; // Your actual client ID
+  final String _clientId =
+      '2926a194889544cf8a0317a47a5f6722'; // Your actual client ID
   final String _redirectUri = 'musiccompareapp://spotify/callback';
-  final String _clientSecret = 'afe1382d55014641af67392fb5fbe98f'; // Your actual client secret
-  final String _authorizationEndpoint = 'https://accounts.spotify.com/authorize';
+  final String _clientSecret =
+      'afe1382d55014641af67392fb5fbe98f'; // Your actual client secret
+  final String _authorizationEndpoint =
+      'https://accounts.spotify.com/authorize';
   final String _tokenEndpoint = 'https://accounts.spotify.com/api/token';
-  final String _scopes = 'user-read-private user-read-email playlist-read-private playlist-modify-private playlist-modify-public user-library-read user-library-modify';
+  final String _scopes =
+      'user-read-private user-read-email playlist-read-private playlist-modify-private playlist-modify-public user-library-read user-library-modify user-follow-read';
 
   String? _accessToken;
   Map<String, dynamic>? _userProfile;
@@ -166,6 +170,63 @@ class SpotifyAuthServiceMobile implements SpotifyAuthService {
         'ids': [songId],
       }),
     );
+  }
+
+  @override
+  Future<List<Map<String, String>>> getFollowers() async {
+    throw UnimplementedError(
+        'Fetching followers is not supported by the Spotify API.');
+  }
+
+  @override
+  Future<List<Map<String, String>>> getFollowing() async {
+    if (_accessToken == null) {
+      throw Exception('Access token is null. Cannot fetch following.');
+    }
+
+    final response = await http.get(
+      Uri.parse('https://api.spotify.com/v1/me/following?type=artist'),
+      headers: {
+        'Authorization': 'Bearer $_accessToken',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return (data['artists']['items'] as List)
+          .map((item) => {
+                'name': item['name'] as String,
+                'profilePictureUrl': item['images'][0]['url'] as String,
+              })
+          .toList();
+    } else {
+      print('Failed to load following: ${response.body}');
+      throw Exception('Failed to load following');
+    }
+  }
+
+  @override
+  Future<Map<String, String>> getProfileData() async {
+    if (_accessToken == null) {
+      throw Exception('Access token is null. Cannot fetch profile data.');
+    }
+
+    final response = await http.get(
+      Uri.parse('https://api.spotify.com/v1/me'),
+      headers: {
+        'Authorization': 'Bearer $_accessToken',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return {
+        'profilePictureUrl': data['images'][0]['url'] as String,
+      };
+    } else {
+      print('Failed to load profile data: ${response.body}');
+      throw Exception('Failed to load profile data');
+    }
   }
 
   @override

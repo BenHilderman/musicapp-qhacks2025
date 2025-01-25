@@ -4,14 +4,16 @@ import '../env.dart'; // Import environment variables
 
 class SpotifyAPI {
   final String clientId = spotifyClientId;
-  final String clientSecret = 'afe1382d55014641af67392fb5fbe98f'; // Use your secret here
+  final String clientSecret =
+      'afe1382d55014641af67392fb5fbe98f'; // Use your secret here
 
   // Obtain an access token from Spotify's Accounts service
   Future<String> _getAccessToken() async {
     final response = await http.post(
       Uri.parse('https://accounts.spotify.com/api/token'),
       headers: {
-        'Authorization': 'Basic ${base64Encode(utf8.encode("$clientId:$clientSecret"))}',
+        'Authorization':
+            'Basic ${base64Encode(utf8.encode("$clientId:$clientSecret"))}',
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: {'grant_type': 'client_credentials'},
@@ -30,7 +32,8 @@ class SpotifyAPI {
     final accessToken = await _getAccessToken();
 
     final response = await http.get(
-      Uri.parse('https://api.spotify.com/v1/search?q=$query&type=album&limit=10'),
+      Uri.parse(
+          'https://api.spotify.com/v1/search?q=$query&type=album&limit=10'),
       headers: {'Authorization': 'Bearer $accessToken'},
     );
 
