@@ -83,7 +83,7 @@ class _MusicCompareAppState extends State<MusicCompareApp> {
     });
   }
 
-  int _selectedIndex = 0;
+  int _selectedIndex = 1; // Set ProfilePage to be the first screen
 
   void _onItemTapped(int index) {
     setState(() {
