@@ -319,7 +319,6 @@ class _ProfilePageState extends State<ProfilePage>
   }
 
   Widget _buildLikesTab() {
-    // Log the initial state of the globalLikedSongs list
     print(
         "Building Likes Tab. Number of liked songs: ${globalLikedSongs.length}");
 
@@ -338,7 +337,6 @@ class _ProfilePageState extends State<ProfilePage>
       itemBuilder: (context, index) {
         final song = globalLikedSongs[index];
 
-        // Log details of each song being displayed
         print("Displaying song #${index + 1}:");
         print("  Title: ${song['title']}");
         print("  Artist: ${song['artist']}");

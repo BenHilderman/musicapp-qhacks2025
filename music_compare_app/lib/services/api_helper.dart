@@ -6,6 +6,7 @@ class SpotifyAPI {
   final String clientId = spotifyClientId;
   final String clientSecret =
       'afe1382d55014641af67392fb5fbe98f'; // Use your secret here
+  final String baseUrl = 'https://api.spotify.com/v1';
 
   // Obtain an access token from Spotify's Accounts service
   Future<String> _getAccessToken() async {
@@ -33,7 +34,7 @@ class SpotifyAPI {
     final accessToken = await _getAccessToken();
 
     final response = await http.get(
-      Uri.parse('https://api.spotify.com/v1/playlists/$playlistId/tracks'),
+      Uri.parse('$baseUrl/playlists/$playlistId/tracks'),
       headers: {'Authorization': 'Bearer $accessToken'},
     );
 
@@ -59,8 +60,7 @@ class SpotifyAPI {
     final accessToken = await _getAccessToken();
 
     final response = await http.get(
-      Uri.parse(
-          'https://api.spotify.com/v1/search?q=$query&type=album&limit=10'),
+      Uri.parse('$baseUrl/search?q=$query&type=album&limit=10'),
       headers: {'Authorization': 'Bearer $accessToken'},
     );
 
@@ -86,7 +86,7 @@ class SpotifyAPI {
     final accessToken = await _getAccessToken();
 
     final response = await http.get(
-      Uri.parse('https://api.spotify.com/v1/albums/$albumId'),
+      Uri.parse('$baseUrl/albums/$albumId'),
       headers: {'Authorization': 'Bearer $accessToken'},
     );
 
@@ -94,6 +94,49 @@ class SpotifyAPI {
       return json.decode(response.body);
     } else {
       throw Exception('Failed to fetch album details: ${response.body}');
+    }
+  }
+
+  // Fetch song details using the song title and artist name
+  Future<Map<String, dynamic>> fetchSongDetails(
+      String songTitle, String artistName) async {
+    if (songTitle.isEmpty || artistName.isEmpty) {
+      throw Exception(
+          'Invalid input: song title and artist name must not be empty');
+    }
+
+    final accessToken = await _getAccessToken();
+    final query = Uri.encodeComponent('$songTitle $artistName');
+    final response = await http.get(
+      Uri.parse('$baseUrl/search?q=$query&type=track&limit=1'),
+      headers: {'Authorization': 'Bearer $accessToken'},
+    );
+
+    print('Request URL: ${response.request?.url}');
+    print('Response status: ${response.statusCode}');
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['tracks']['items'].isNotEmpty) {
+        final track = data['tracks']['items'][0];
+        return {
+          'title': track['name'],
+          'artist': track['artists'][0]['name'],
+          'image': track['album']['images'].isNotEmpty
+              ? track['album']['images'][0]['url']
+              : 'assets/images/default_album_art.png', // Local fallback
+        };
+      } else {
+        print('No track found for title: $songTitle, artist: $artistName.');
+        return {
+          'title': songTitle,
+          'artist': artistName,
+          'image':
+              'assets/images/default_album_art.png', // Fallback for display
+        };
+      }
+    } else {
+      throw Exception('Failed to fetch song details: ${response.body}');
     }
   }
 }

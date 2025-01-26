@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_card_swiper/flutter_card_swiper.dart';
-import 'package:music_compare_app/env.dart';
-import 'dart:io';
 import '../services/api_helper.dart'; // Spotify API helper
 import '../widgets/song_card.dart'; // Custom SongCard widget
+import '../services/song_recommendations.dart'; // SongRecommendations class
+import '../env.dart'; // Import global variables
+import 'dart:math';
 
 class SongSwipePage extends StatefulWidget {
   @override
@@ -11,44 +11,129 @@ class SongSwipePage extends StatefulWidget {
 }
 
 class _SongSwipePageState extends State<SongSwipePage> {
-  final SpotifyAPI spotifyAPI = SpotifyAPI(); // API instance
-  List<Map<String, String>> songs = []; // List of songs
-  List<Map<String, String>> likedSongs = []; // List of liked songs
+  final SpotifyAPI spotifyAPI = SpotifyAPI(); // Spotify API instance
+  List<Map<String, String>> songs = []; // List of songs to display
+  List<Map<String, String>> likedSongs = []; // List of locally liked songs
   bool isLoading = true; // Loading indicator
-  final String playlistId = '3fxxZwjRv8M0NczIFykCc8'; // Playlist ID
+  bool isFetchingRecommendation = false; // To track recommendation fetching
 
-  // Variables to manage animations
+  Offset cardOffset = Offset.zero;
+  double cardAngle = 0;
+
+  // Animation toggles
   bool showLikeAnimation = false;
   bool showDislikeAnimation = false;
 
   @override
   void initState() {
     super.initState();
-    _loadSongs(); // Load songs on page initialization
+    _getInitialRecommendation(); // Fetch initial recommendations
   }
 
-  /// Fetch songs from the specified playlist
-  Future<void> _loadSongs() async {
+  /// Fetch the initial recommendation to start the song list
+  Future<void> _getInitialRecommendation() async {
     try {
       setState(() {
         isLoading = true;
       });
-
-      // Fetch songs from the specified playlist
-      final fetchedSongs = await spotifyAPI.fetchTracksFromPlaylist(playlistId);
-      setState(() {
-        songs = fetchedSongs;
-        isLoading = false;
-      });
+      print("Fetching the first recommendation...");
+      await _getNextSongRecommendation(); // Start with recommendations
     } catch (e) {
-      print("Error loading songs: $e");
+      print("Error fetching initial recommendation: $e");
+    } finally {
       setState(() {
         isLoading = false;
       });
     }
   }
 
-  // Show Like animation
+  /// Fetch the next song recommendation using the user's liked songs
+  Future<void> _getNextSongRecommendation() async {
+    if (isFetchingRecommendation) return; // Avoid multiple simultaneous calls
+    setState(() {
+      isFetchingRecommendation = true;
+    });
+
+    const systemPrompt =
+        "You are an expert in music recommendations. Your goal is to recommend songs by up-and-coming artists with fewer than 600,000 plays. "
+        "If the user provides a list of liked songs, carefully analyze their preferences, including genres, moods, tempos, and lyrical themes. Use this analysis to recommend a song that closely aligns with their taste while introducing them to a new artist or sound. "
+        "If no liked songs are provided, generate a random recommendation from an artist with fewer than 600,000 plays that is likely to appeal to a wide audience. "
+        "Do not include any explanation in your response. Respond only with the song title followed by a dash and the artist's name. For example: Songtitle-Artist.";
+    const promptUserRanking =
+        "Using the user's liked songs listed below, recommend a new song.";
+
+    // Format globalLikedSongs into a string
+    final userRanking = globalLikedSongs.asMap().entries.map((entry) {
+      final index = entry.key + 1; // Format ranking starting from 1
+      final song = entry.value['title'] ?? "Unknown Title";
+      final artist = entry.value['artist'] ?? "Unknown Artist";
+      return "$index. $song - $artist";
+    }).join(", ");
+
+    try {
+      print("Fetching recommendation based on globalLikedSongs...");
+      print("Formatted user ranking: $userRanking");
+
+      Map<String, dynamic>? recommendation;
+      do {
+        recommendation = await SongRecommendations.fetchRecommendation(
+          systemPrompt: systemPrompt,
+          userPrompt: promptUserRanking,
+          userRanking: userRanking,
+        );
+
+        print(
+            "Recommendation fetched: ${recommendation['song']} by ${recommendation['artist']}");
+      } while (songs.any((song) =>
+          song['title'] == recommendation!['song'] &&
+          song['artist'] == recommendation['artist']));
+
+      final songDetails = await spotifyAPI.fetchSongDetails(
+        recommendation['song']!,
+        recommendation['artist']!,
+      );
+
+      setState(() {
+        songs.add({
+          'title': songDetails['title'],
+          'artist': songDetails['artist'],
+          'image': songDetails['image'], // Spotify album image
+        });
+      });
+    } catch (e) {
+      print('Error fetching recommendation: $e');
+    } finally {
+      setState(() {
+        isFetchingRecommendation = false;
+      });
+    }
+  }
+
+  /// Handle like and dislike actions
+  void _handleSwipe(bool isLiked) {
+    if (songs.isEmpty) return;
+
+    final swipedSong = songs.removeAt(0);
+
+    if (isLiked) {
+      likedSongs.add(swipedSong);
+      globalLikedSongs.add(swipedSong); // Update the global list
+      print("Liked: ${swipedSong['title']} by ${swipedSong['artist']}");
+      print("Global Liked Songs: $globalLikedSongs");
+    } else {
+      print("Disliked: ${swipedSong['title']} by ${swipedSong['artist']}");
+    }
+
+    setState(() {
+      cardOffset = Offset.zero;
+      cardAngle = 0;
+    });
+
+    // Fetch the next song recommendation
+    _getNextSongRecommendation();
+  }
+
+  // Show like/dislike animations
   void _showLikeAnimation() {
     setState(() {
       showLikeAnimation = true;
@@ -60,7 +145,6 @@ class _SongSwipePageState extends State<SongSwipePage> {
     });
   }
 
-  // Show Dislike animation
   void _showDislikeAnimation() {
     setState(() {
       showDislikeAnimation = true;
@@ -72,83 +156,39 @@ class _SongSwipePageState extends State<SongSwipePage> {
     });
   }
 
-  Future<void> _getNextSongRecommendation() async {
-    try {
-      final result =
-          await Process.run('python3', ['ari/extract_song_features.py']);
-      if (result.exitCode == 0) {
-        final output = result.stdout.trim();
-        final parts = output.split('|');
-        if (parts.length == 2) {
-          setState(() {
-            songs.add({
-              'title': parts[0],
-              'artist': parts[1],
-              'image': '', // Placeholder for image
-            });
-          });
-        }
-      } else {
-        print('Error running Python script: ${result.stderr}');
-      }
-    } catch (e) {
-      print('Error running Python script: $e');
-    }
-  }
-
-  void _handleSwipe(int index, CardSwiperDirection direction) {
-    if (direction == CardSwiperDirection.top ||
-        direction == CardSwiperDirection.right) {
-      // Like action (swipe up or right)
-      print("Liked: ${songs[index]['title']}");
-      likedSongs.add(songs[index]); // Add to local liked songs list
-      globalLikedSongs.add(songs[index]); // Add to global liked songs list
-      print("Added to global liked songs: ${songs[index]['title']}");
-      print("Global liked songs count: ${globalLikedSongs.length}");
-      _showLikeAnimation();
-    } else if (direction == CardSwiperDirection.bottom ||
-        direction == CardSwiperDirection.left) {
-      // Dislike action (swipe down or left)
-      print("Disliked: ${songs[index]['title']}");
-      _showDislikeAnimation();
-    }
-    _getNextSongRecommendation();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Color(0xFF282828), // Spotify grey background
-        centerTitle: true, // Center the content
+        centerTitle: true,
         title: Row(
-          mainAxisAlignment:
-              MainAxisAlignment.center, // Center the content in the row
-          mainAxisSize: MainAxisSize.min, // Shrink the row to fit the content
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Image.asset(
-              'assets/logo.png', // Path to your image asset
-              width: 50, // Larger size for better visibility
+              'assets/logo.png', // Path to your logo asset
+              width: 50,
               height: 50,
             ),
-            SizedBox(width: 10), // Spacing between the logo and text
+            SizedBox(width: 10),
             RichText(
               text: TextSpan(
                 children: [
                   TextSpan(
-                    text: 'Spotter', // The first part of the text
+                    text: 'Spotter', // App name
                     style: TextStyle(
-                      color: Colors.white, // White text for contrast
+                      color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 24, // Larger font size
+                      fontSize: 24,
                     ),
                   ),
                   TextSpan(
-                    text: 'Box', // The word "Box"
+                    text: 'Box',
                     style: TextStyle(
-                      color: Color(0xFF1DB954), // Spotify green for "Box"
+                      color: Color(0xFF1DB954), // Spotify green for emphasis
                       fontWeight: FontWeight.bold,
-                      fontSize: 24, // Match the font size of "Spotter"
+                      fontSize: 24,
                     ),
                   ),
                 ],
@@ -156,34 +196,57 @@ class _SongSwipePageState extends State<SongSwipePage> {
             ),
           ],
         ),
-        iconTheme: IconThemeData(color: Colors.white), // White icons
+        iconTheme: IconThemeData(color: Colors.white),
       ),
       body: isLoading
           ? Center(child: CircularProgressIndicator()) // Show loading spinner
           : songs.isEmpty
-              ? Center(child: Text("No songs found")) // Handle empty results
+              ? Center(
+                  child: Text(
+                      "Loading your song recommendation...")) // Placeholder
               : Center(
                   child: Stack(
                     children: [
-                      Container(
-                        height: 500,
-                        padding: EdgeInsets.all(16.0),
-                        child: CardSwiper(
-                          cards: songs.map((song) {
-                            return SongCard(
-                              title: song['title'] ?? "Unknown Title",
-                              artist: song['artist'] ?? "Unknown Artist",
-                              image: song['image'] ??
-                                  "", // Placeholder for missing images
-                            );
-                          }).toList(),
-                          onSwipe: (index, direction) {
-                            _handleSwipe(index, direction);
-                          },
-                          scale: 0.9, // Slight scaling for cards
-                          padding: EdgeInsets.symmetric(horizontal: 20),
+                      for (int i = 0; i < songs.length; i++)
+                        Positioned.fill(
+                          child: GestureDetector(
+                            onPanUpdate: (details) {
+                              setState(() {
+                                cardOffset += details.delta;
+                                cardAngle = cardOffset.dx * 0.003;
+                              });
+                            },
+                            onPanEnd: (details) {
+                              final threshold =
+                                  MediaQuery.of(context).size.width * 0.3;
+                              if (cardOffset.dx > threshold) {
+                                _handleSwipe(true); // Liked
+                                _showLikeAnimation();
+                              } else if (cardOffset.dx < -threshold) {
+                                _handleSwipe(false); // Disliked
+                                _showDislikeAnimation();
+                              } else {
+                                setState(() {
+                                  cardOffset = Offset.zero;
+                                  cardAngle = 0;
+                                });
+                              }
+                            },
+                            child: Transform.translate(
+                              offset: i == 0 ? cardOffset : Offset.zero,
+                              child: Transform.rotate(
+                                angle: i == 0 ? cardAngle : 0,
+                                child: SongCard(
+                                  title: songs[i]['title'] ?? "Unknown Title",
+                                  artist:
+                                      songs[i]['artist'] ?? "Unknown Artist",
+                                  image: songs[i]['image'] ??
+                                      'assets/images/default_album_art.png',
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
                       if (showLikeAnimation)
                         Positioned(
                           top: 100,
