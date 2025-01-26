@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart';
 import '../env.dart';
 import '../services/api_helper.dart'; // Spotify API helper
-import 'package:intl/intl.dart'; // For formatting timestamps
 
 class AlbumDetailPage extends StatefulWidget {
   final String albumId; // ID of the album
@@ -16,6 +15,8 @@ class AlbumDetailPage extends StatefulWidget {
 class _AlbumDetailPageState extends State<AlbumDetailPage> {
   Map<String, dynamic>? albumDetails;
   bool isLoading = true;
+  bool hasRated = false;
+  Map<String, dynamic>? userRating;
 
   int production = 50;
   int lyrics = 50;
@@ -23,9 +24,9 @@ class _AlbumDetailPageState extends State<AlbumDetailPage> {
   int intangibles = 50;
 
   final SpotifyAPI spotifyAPI = SpotifyAPI();
-  final Color spotifyGreen = Color(0xFF1DB954);
-  final Color darkBackground = Color(0xFF191414);
-  final Color darkCard = Color(0xFF282828);
+  final Color spotifyGreen = const Color(0xFF1DB954);
+  final Color darkBackground = const Color(0xFF191414);
+  final Color darkCard = const Color(0xFF282828);
   final Color textColor = Colors.white;
 
   double get totalRating => (production + lyrics + flow + intangibles) / 4.0;
@@ -34,6 +35,7 @@ class _AlbumDetailPageState extends State<AlbumDetailPage> {
   void initState() {
     super.initState();
     fetchAlbumDetails(widget.albumId);
+    checkUserRating();
   }
 
   Future<void> fetchAlbumDetails(String albumId) async {
@@ -55,115 +57,127 @@ class _AlbumDetailPageState extends State<AlbumDetailPage> {
     }
   }
 
-  Future<void> _submitRating() async {
+  Future<void> checkUserRating() async {
     try {
-      // Ensure the user has an email
-      if (spotifyUserEmail == null) {
-        _showEmailRequiredDialog();
-        return;
+      if (spotifyUserEmail == null) return;
+
+      // Query to check if the user has rated this album
+      final QueryBuilder<ParseObject> ratingQuery =
+          QueryBuilder<ParseObject>(ParseObject('RATINGS'))
+            ..whereEqualTo('albumID', widget.albumId)
+            ..whereEqualTo('user', spotifyUserEmail);
+
+      final ParseResponse ratingResponse = await ratingQuery.query();
+
+      if (ratingResponse.success &&
+          ratingResponse.results != null &&
+          ratingResponse.results!.isNotEmpty) {
+        final ParseObject rating = ratingResponse.results!.first as ParseObject;
+
+        setState(() {
+          hasRated = true;
+          userRating = {
+            'production': rating.get<int>('production') ?? 0,
+            'lyrics': rating.get<int>('lyrics') ?? 0,
+            'flow': rating.get<int>('flow') ?? 0,
+            'intangibles': rating.get<int>('intangibles') ?? 0,
+          };
+        });
+      } else {
+        setState(() {
+          hasRated = false;
+          userRating = null;
+        });
+      }
+    } catch (e) {
+      print('Error checking user rating: $e');
+      setState(() {
+        hasRated = false;
+        userRating = null;
+      });
+    }
+  }
+
+  Future<void> _submitRating() async {
+    if (hasRated) return;
+
+    try {
+      if (spotifyUserEmail == null) return;
+
+      // Ensure album exists or create it
+      String? albumObjectId;
+      final QueryBuilder<ParseObject> albumQuery =
+          QueryBuilder<ParseObject>(ParseObject('ALBUM'))
+            ..whereEqualTo('albumID', widget.albumId);
+      final ParseResponse albumResponse = await albumQuery.query();
+
+      if (albumResponse.success &&
+          albumResponse.results != null &&
+          albumResponse.results!.isNotEmpty) {
+        albumObjectId = (albumResponse.results!.first as ParseObject).objectId;
+      } else {
+        final ParseObject newAlbum = ParseObject('ALBUM')
+          ..set('albumID', widget.albumId);
+        final ParseResponse newAlbumResponse = await newAlbum.save();
+        if (newAlbumResponse.success) {
+          albumObjectId = newAlbum.objectId;
+        } else {
+          print('Failed to save album: ${newAlbumResponse.error?.message}');
+          return;
+        }
       }
 
-      try {
-        // Step 1: Check if the album exists in the ALBUM table
-        String? albumObjectId;
-        final QueryBuilder<ParseObject> albumQuery =
-            QueryBuilder<ParseObject>(ParseObject('ALBUM'))
-              ..whereEqualTo('albumID', widget.albumId); // Match albumID
-        final ParseResponse albumResponse = await albumQuery.query();
+      // Ensure user exists or create it
+      String? userObjectId;
+      final QueryBuilder<ParseObject> userQuery =
+          QueryBuilder<ParseObject>(ParseObject('USER'))
+            ..whereEqualTo('email', spotifyUserEmail);
+      final ParseResponse userResponse = await userQuery.query();
 
-        if (albumResponse.success &&
-            albumResponse.results != null &&
-            albumResponse.results!.isNotEmpty) {
-          // Album exists
-          final ParseObject album = albumResponse.results!.first as ParseObject;
-          albumObjectId = album.objectId;
+      if (userResponse.success &&
+          userResponse.results != null &&
+          userResponse.results!.isNotEmpty) {
+        userObjectId = (userResponse.results!.first as ParseObject).objectId;
+      } else {
+        final ParseObject newUser = ParseObject('USER')
+          ..set('email', spotifyUserEmail);
+        final ParseResponse newUserResponse = await newUser.save();
+        if (newUserResponse.success) {
+          userObjectId = newUser.objectId;
         } else {
-          // Album does not exist, create it
-          final ParseObject newAlbum = ParseObject('ALBUM')
-            ..set('albumID', widget.albumId);
-          final ParseResponse saveAlbumResponse = await newAlbum.save();
-          if (saveAlbumResponse.success) {
-            albumObjectId = newAlbum.objectId;
-          } else {
-            print('Failed to save album: ${saveAlbumResponse.error?.message}');
-            return;
-          }
+          print('Failed to save user: ${newUserResponse.error?.message}');
+          return;
         }
+      }
 
-        // Step 2: Check if the user exists in the _User table
-        String? userObjectId;
-        final QueryBuilder<ParseObject> userQuery =
-            QueryBuilder<ParseObject>(ParseObject('USER'))
-              ..whereEqualTo('email', spotifyUserEmail); // Match email
-        final ParseResponse userResponse = await userQuery.query();
+      // Save the rating
+      final ParseObject rating = ParseObject('RATINGS')
+        ..set('user', ParseObject('USER')..objectId = userObjectId)
+        ..set('albumID', ParseObject('ALBUM')..objectId = albumObjectId)
+        ..set('production', production)
+        ..set('lyrics', lyrics)
+        ..set('flow', flow)
+        ..set('intangibles', intangibles)
+        ..set('timestamp', DateTime.now());
 
-        if (userResponse.success &&
-            userResponse.results != null &&
-            userResponse.results!.isNotEmpty) {
-          // User exists
-          final ParseObject user = userResponse.results!.first as ParseObject;
-          userObjectId = user.objectId;
-        } else {
-          // User does not exist, create it with email as objectId
-          final ParseObject newUser = ParseObject('USER')
-            ..set('email', spotifyUserEmail); // Set email field
-          final ParseResponse saveUserResponse = await newUser.save();
-          if (saveUserResponse.success) {
-            userObjectId = newUser.objectId;
-          } else {
-            print('Failed to save user: ${saveUserResponse.error?.message}');
-            return;
-          }
-        }
-
-        // Step 3: Save the RATING object with pointers to ALBUM and USER
-        if (albumObjectId != null && userObjectId != null) {
-          final ParseObject rating = ParseObject('RATINGS')
-            ..set('user',
-                ParseObject('USER')..objectId = userObjectId) // Pointer to User
-            ..set(
-                'albumID',
-                ParseObject('ALBUM')
-                  ..objectId = albumObjectId) // Pointer to Album
-            ..set('production', production)
-            ..set('lyrics', lyrics)
-            ..set('flow', flow)
-            ..set('intangibles', intangibles)
-            ..set('timestamp', DateTime.now()); // Current timestamp
-
-          final ParseResponse ratingResponse = await rating.save();
-          if (ratingResponse.success) {
-            print('Rating saved successfully!');
-          } else {
-            print('Failed to save rating: ${ratingResponse.error?.message}');
-          }
-        }
-      } catch (e) {
-        print('Error saving rating: $e');
+      final ParseResponse ratingResponse = await rating.save();
+      if (ratingResponse.success) {
+        setState(() {
+          hasRated = true;
+          userRating = {
+            'production': production,
+            'lyrics': lyrics,
+            'flow': flow,
+            'intangibles': intangibles,
+          };
+        });
+        print('Rating saved successfully!');
+      } else {
+        print('Failed to save rating: ${ratingResponse.error?.message}');
       }
     } catch (e) {
       print("Error submitting rating: $e");
     }
-  }
-
-  void _showEmailRequiredDialog() {
-    // Show a dialog to inform the user that an email is required
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Email Required"),
-        content: Text(
-            "You must have an email associated with your account to submit a rating."),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-            },
-            child: Text("OK"),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -192,61 +206,63 @@ class _AlbumDetailPageState extends State<AlbumDetailPage> {
   }
 
   Widget _buildAlbumDetails() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (albumDetails!['images'] != null &&
-                  albumDetails!['images'].isNotEmpty)
-                Image.network(
-                  albumDetails!['images'][0]['url'],
-                  width: 150,
-                  height: 150,
-                  fit: BoxFit.cover,
-                ),
-              SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      albumDetails!['name'] ?? 'Unknown',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (albumDetails?['images'] != null &&
+                    albumDetails?['images'].isNotEmpty)
+                  Image.network(
+                    albumDetails?['images'][0]['url'] ?? '',
+                    width: 150,
+                    height: 150,
+                    fit: BoxFit.cover,
+                  ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        albumDetails?['name'] ?? 'Unknown',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Released: ${albumDetails!['release_date'] ?? 'Unknown'}',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: textColor.withOpacity(0.7),
+                      Text(
+                        'Released: ${albumDetails?['release_date'] ?? 'Unknown'}',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: textColor.withOpacity(0.7),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16),
-          Text(
-            "Tracks:",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w500,
-              color: textColor,
+              ],
             ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: albumDetails!['tracks']['items'].length,
+            const SizedBox(height: 16),
+            Text(
+              "Tracks:",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+              ),
+            ),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: albumDetails?['tracks']['items']?.length ?? 0,
               itemBuilder: (context, index) {
-                final track = albumDetails!['tracks']['items'][index];
+                final track = albumDetails?['tracks']['items'][index];
                 return ListTile(
                   title: Text(
                     "${index + 1}. ${track['name']}",
@@ -255,57 +271,66 @@ class _AlbumDetailPageState extends State<AlbumDetailPage> {
                 );
               },
             ),
-          ),
-          SizedBox(height: 16),
-          Center(
-            child: Text(
-              'Your Overall Rating: ${totalRating.toStringAsFixed(2)}',
-              style: TextStyle(
-                color: spotifyGreen,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+            const SizedBox(height: 16),
+            if (hasRated && userRating != null) ...[
+              Text(
+                "Your Rating:",
+                style: TextStyle(fontSize: 18, color: textColor),
               ),
-            ),
-          ),
-          SizedBox(height: 16),
-          _buildRatingSlider('Production', (value) {
-            setState(() {
-              production = value.toInt();
-            });
-          }, production),
-          _buildRatingSlider('Lyrics', (value) {
-            setState(() {
-              lyrics = value.toInt();
-            });
-          }, lyrics),
-          _buildRatingSlider('Flow', (value) {
-            setState(() {
-              flow = value.toInt();
-            });
-          }, flow),
-          _buildRatingSlider('Intangibles', (value) {
-            setState(() {
-              intangibles = value.toInt();
-            });
-          }, intangibles),
-          SizedBox(height: 16),
-          Center(
-            child: ElevatedButton(
-              onPressed: _submitRating,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: spotifyGreen,
+              Text(
+                "Production: ${userRating!['production']}",
+                style: TextStyle(color: textColor),
               ),
-              child: Text(
-                'Submit Rating',
-                style: TextStyle(
-                  color: darkBackground,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+              Text(
+                "Lyrics: ${userRating!['lyrics']}",
+                style: TextStyle(color: textColor),
+              ),
+              Text(
+                "Flow: ${userRating!['flow']}",
+                style: TextStyle(color: textColor),
+              ),
+              Text(
+                "Intangibles: ${userRating!['intangibles']}",
+                style: TextStyle(color: textColor),
+              ),
+            ] else ...[
+              _buildRatingSlider('Production', (value) {
+                setState(() {
+                  production = value.toInt();
+                });
+              }, production),
+              _buildRatingSlider('Lyrics', (value) {
+                setState(() {
+                  lyrics = value.toInt();
+                });
+              }, lyrics),
+              _buildRatingSlider('Flow', (value) {
+                setState(() {
+                  flow = value.toInt();
+                });
+              }, flow),
+              _buildRatingSlider('Intangibles', (value) {
+                setState(() {
+                  intangibles = value.toInt();
+                });
+              }, intangibles),
+              const SizedBox(height: 16),
+              Center(
+                child: ElevatedButton(
+                  onPressed: _submitRating,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: spotifyGreen,
+                    textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  child: const Text(
+                    "Submit Rating",
+                    style: TextStyle(color: Colors.white),
+                  ),
                 ),
               ),
-            ),
-          ),
-        ],
+            ],
+          ],
+        ),
       ),
     );
   }
