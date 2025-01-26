@@ -19,6 +19,7 @@ class _SongSwipePageState extends State<SongSwipePage> {
 
   Offset cardOffset = Offset.zero;
   double cardAngle = 0;
+  double opacity = 1.0;
 
   // Animation toggles
   bool showLikeAnimation = false;
@@ -59,10 +60,6 @@ class _SongSwipePageState extends State<SongSwipePage> {
         "If the user provides a list of liked songs, carefully analyze their preferences, including genres, moods, tempos, and lyrical themes. Use this analysis to recommend a song that closely aligns with their taste while introducing them to a new artist or sound. "
         "If no liked songs are provided, generate a random recommendation from an artist with fewer than 600,000 plays that is likely to appeal to a wide audience. "
         "Do not include any explanation in your response. Respond only with the song title followed by a dash and the artist's name. For example: Songtitle-Artist.";
-    const promptUserRanking =
-        "Using the user's liked songs listed below, recommend a new song.";
-
-    // Format globalLikedSongs into a string
     final userRanking = globalLikedSongs.asMap().entries.map((entry) {
       final index = entry.key + 1; // Format ranking starting from 1
       final song = entry.value['title'] ?? "Unknown Title";
@@ -74,19 +71,11 @@ class _SongSwipePageState extends State<SongSwipePage> {
       print("Fetching recommendation based on globalLikedSongs...");
       print("Formatted user ranking: $userRanking");
 
-      Map<String, dynamic>? recommendation;
-      do {
-        recommendation = await SongRecommendations.fetchRecommendation(
-          systemPrompt: systemPrompt,
-          userPrompt: promptUserRanking,
-          userRanking: userRanking,
-        );
-
-        print(
-            "Recommendation fetched: ${recommendation['song']} by ${recommendation['artist']}");
-      } while (songs.any((song) =>
-          song['title'] == recommendation!['song'] &&
-          song['artist'] == recommendation['artist']));
+      final recommendation = await SongRecommendations.fetchRecommendation(
+        systemPrompt: systemPrompt,
+        userPrompt: "Based on the user's liked songs, recommend a new one.",
+        userRanking: userRanking,
+      );
 
       final songDetails = await spotifyAPI.fetchSongDetails(
         recommendation['song']!,
@@ -119,7 +108,6 @@ class _SongSwipePageState extends State<SongSwipePage> {
       likedSongs.add(swipedSong);
       globalLikedSongs.add(swipedSong); // Update the global list
       print("Liked: ${swipedSong['title']} by ${swipedSong['artist']}");
-      print("Global Liked Songs: $globalLikedSongs");
     } else {
       print("Disliked: ${swipedSong['title']} by ${swipedSong['artist']}");
     }
@@ -127,6 +115,7 @@ class _SongSwipePageState extends State<SongSwipePage> {
     setState(() {
       cardOffset = Offset.zero;
       cardAngle = 0;
+      opacity = 1.0;
     });
 
     // Fetch the next song recommendation
@@ -162,58 +151,38 @@ class _SongSwipePageState extends State<SongSwipePage> {
       appBar: AppBar(
         backgroundColor: Color(0xFF282828), // Spotify grey background
         centerTitle: true,
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Image.asset(
-              'assets/logo.png', // Path to your logo asset
-              width: 50,
-              height: 50,
-            ),
-            SizedBox(width: 10),
-            RichText(
-              text: TextSpan(
-                children: [
-                  TextSpan(
-                    text: 'Spotter', // App name
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 24,
-                    ),
-                  ),
-                  TextSpan(
-                    text: 'Box',
-                    style: TextStyle(
-                      color: Color(0xFF1DB954), // Spotify green for emphasis
-                      fontWeight: FontWeight.bold,
-                      fontSize: 24,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+        title: Text(
+          'Discover New Music',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+          ),
         ),
-        iconTheme: IconThemeData(color: Colors.white),
       ),
       body: isLoading
-          ? Center(child: CircularProgressIndicator()) // Show loading spinner
+          ? Center(child: CircularProgressIndicator())
           : songs.isEmpty
               ? Center(
                   child: Text(
-                      "Loading your song recommendation...")) // Placeholder
-              : Center(
-                  child: Stack(
-                    children: [
-                      for (int i = 0; i < songs.length; i++)
-                        Positioned.fill(
+                    "Loading your song recommendations...",
+                    style: TextStyle(color: Colors.grey, fontSize: 16),
+                  ),
+                )
+              : Stack(
+                  children: [
+                    for (int i = 0; i < songs.length; i++)
+                      Positioned.fill(
+                        child: AnimatedOpacity(
+                          duration: Duration(milliseconds: 200),
+                          opacity: i == 0 ? opacity : 1.0,
                           child: GestureDetector(
                             onPanUpdate: (details) {
                               setState(() {
                                 cardOffset += details.delta;
-                                cardAngle = cardOffset.dx * 0.003;
+                                cardAngle = cardOffset.dx * 0.002;
+                                opacity =
+                                    max(0.4, 1 - (cardOffset.dx.abs() / 300));
                               });
                             },
                             onPanEnd: (details) {
@@ -221,54 +190,86 @@ class _SongSwipePageState extends State<SongSwipePage> {
                                   MediaQuery.of(context).size.width * 0.3;
                               if (cardOffset.dx > threshold) {
                                 _handleSwipe(true); // Liked
-                                _showLikeAnimation();
                               } else if (cardOffset.dx < -threshold) {
                                 _handleSwipe(false); // Disliked
-                                _showDislikeAnimation();
                               } else {
                                 setState(() {
                                   cardOffset = Offset.zero;
                                   cardAngle = 0;
+                                  opacity = 1.0;
                                 });
                               }
                             },
                             child: Transform.translate(
-                              offset: i == 0 ? cardOffset : Offset.zero,
+                              offset: i == 0
+                                  ? cardOffset
+                                  : Offset(
+                                      0,
+                                      10.0 * (i - 1),
+                                    ),
                               child: Transform.rotate(
                                 angle: i == 0 ? cardAngle : 0,
-                                child: SongCard(
-                                  title: songs[i]['title'] ?? "Unknown Title",
-                                  artist:
-                                      songs[i]['artist'] ?? "Unknown Artist",
-                                  image: songs[i]['image'] ??
-                                      'assets/images/default_album_art.png',
+                                child: Center(
+                                  child: Container(
+                                    width:
+                                        MediaQuery.of(context).size.width * 0.7,
+                                    height:
+                                        MediaQuery.of(context).size.width * 0.7,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(20),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black38,
+                                          blurRadius: 10,
+                                          offset: Offset(0, 5),
+                                        ),
+                                      ],
+                                      image: DecorationImage(
+                                        image: NetworkImage(
+                                          songs[i]['image'] ??
+                                              'assets/images/default_album_art.png',
+                                        ),
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                    child: Align(
+                                      alignment: Alignment.bottomLeft,
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(8.0),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              songs[i]['title'] ??
+                                                  "Unknown Title",
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 16,
+                                              ),
+                                            ),
+                                            Text(
+                                              songs[i]['artist'] ??
+                                                  "Unknown Artist",
+                                              style: TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      if (showLikeAnimation)
-                        Positioned(
-                          top: 100,
-                          left: MediaQuery.of(context).size.width / 2 - 50,
-                          child: Icon(
-                            Icons.favorite,
-                            color: Colors.green,
-                            size: 100,
-                          ),
-                        ),
-                      if (showDislikeAnimation)
-                        Positioned(
-                          top: 100,
-                          left: MediaQuery.of(context).size.width / 2 - 50,
-                          child: Icon(
-                            Icons.clear,
-                            color: Colors.red,
-                            size: 100,
-                          ),
-                        ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
     );
   }
