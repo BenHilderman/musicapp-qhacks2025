@@ -63,28 +63,84 @@ class _AlbumDetailPageState extends State<AlbumDetailPage> {
         return;
       }
 
-      // Get the current timestamp
-      final DateTime now = DateTime.now();
-      final String formattedTimestamp = now.toIso8601String();
+      try {
+        // Step 1: Check if the album exists in the ALBUM table
+        String? albumObjectId;
+        final QueryBuilder<ParseObject> albumQuery =
+            QueryBuilder<ParseObject>(ParseObject('ALBUM'))
+              ..whereEqualTo('albumID', widget.albumId); // Match albumID
+        final ParseResponse albumResponse = await albumQuery.query();
 
-      // Create the rating object
-      var rateObj = ParseObject('RATINGS')
-        ..set('userEmail', spotifyUserEmail) // Use the globally stored email
-        ..set('timestamp', formattedTimestamp)
-        ..set('albumID', widget.albumId) // Use the album ID dynamically
-        ..set('production', production)
-        ..set('lyrics', lyrics)
-        ..set('flow', flow)
-        ..set('intangibles', intangibles);
+        if (albumResponse.success &&
+            albumResponse.results != null &&
+            albumResponse.results!.isNotEmpty) {
+          // Album exists
+          final ParseObject album = albumResponse.results!.first as ParseObject;
+          albumObjectId = album.objectId;
+        } else {
+          // Album does not exist, create it
+          final ParseObject newAlbum = ParseObject('ALBUM')
+            ..set('albumID', widget.albumId);
+          final ParseResponse saveAlbumResponse = await newAlbum.save();
+          if (saveAlbumResponse.success) {
+            albumObjectId = newAlbum.objectId;
+          } else {
+            print('Failed to save album: ${saveAlbumResponse.error?.message}');
+            return;
+          }
+        }
 
-      // Save the object
-      await rateObj.save();
+        // Step 2: Check if the user exists in the _User table
+        String? userObjectId;
+        final QueryBuilder<ParseObject> userQuery =
+            QueryBuilder<ParseObject>(ParseObject('USER'))
+              ..whereEqualTo('email', spotifyUserEmail); // Match email
+        final ParseResponse userResponse = await userQuery.query();
 
-      print("Submitted rating:");
-      print("User Email: $spotifyUserEmail");
-      print(
-          "Production: $production, Lyrics: $lyrics, Flow: $flow, Intangibles: $intangibles");
-      print("Overall Rating: $totalRating");
+        if (userResponse.success &&
+            userResponse.results != null &&
+            userResponse.results!.isNotEmpty) {
+          // User exists
+          final ParseObject user = userResponse.results!.first as ParseObject;
+          userObjectId = user.objectId;
+        } else {
+          // User does not exist, create it with email as objectId
+          final ParseObject newUser = ParseObject('USER')
+            ..set('email', spotifyUserEmail); // Set email field
+          final ParseResponse saveUserResponse = await newUser.save();
+          if (saveUserResponse.success) {
+            userObjectId = newUser.objectId;
+          } else {
+            print('Failed to save user: ${saveUserResponse.error?.message}');
+            return;
+          }
+        }
+
+        // Step 3: Save the RATING object with pointers to ALBUM and USER
+        if (albumObjectId != null && userObjectId != null) {
+          final ParseObject rating = ParseObject('RATINGS')
+            ..set('user',
+                ParseObject('USER')..objectId = userObjectId) // Pointer to User
+            ..set(
+                'albumID',
+                ParseObject('ALBUM')
+                  ..objectId = albumObjectId) // Pointer to Album
+            ..set('production', production)
+            ..set('lyrics', lyrics)
+            ..set('flow', flow)
+            ..set('intangibles', intangibles)
+            ..set('timestamp', DateTime.now()); // Current timestamp
+
+          final ParseResponse ratingResponse = await rating.save();
+          if (ratingResponse.success) {
+            print('Rating saved successfully!');
+          } else {
+            print('Failed to save rating: ${ratingResponse.error?.message}');
+          }
+        }
+      } catch (e) {
+        print('Error saving rating: $e');
+      }
     } catch (e) {
       print("Error submitting rating: $e");
     }
