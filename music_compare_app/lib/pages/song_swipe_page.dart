@@ -4,6 +4,8 @@ import '../services/song_recommendations.dart'; // SongRecommendations class
 import '../env.dart'; // Import global variables
 import 'dart:math';
 
+List<String> recommendedByGronq = []; // Global list to store recommended songs
+
 class SongSwipePage extends StatefulWidget {
   @override
   _SongSwipePageState createState() => _SongSwipePageState();
@@ -21,6 +23,7 @@ class _SongSwipePageState extends State<SongSwipePage> {
   double opacity = 1.0;
 
   // Animation toggles
+  double iconOpacity = 0.0; // Dynamic opacity for heart/X
   String? overlayIcon; // "heart" for like, "cross" for dislike
 
   @override
@@ -50,11 +53,13 @@ class _SongSwipePageState extends State<SongSwipePage> {
       isFetchingRecommendation = true;
     });
 
-    const systemPrompt =
+    final excludedSongs = recommendedByGronq.join(', ');
+    final systemPrompt =
         "You are an expert in music recommendations. Your goal is to recommend songs by up-and-coming artists with fewer than 600,000 plays. "
-        "If the user provides a list of liked songs, carefully analyze their preferences, including genres, moods, tempos, and lyrical themes. Use this analysis to recommend a song that closely aligns with their taste while introducing them to a new artist or sound. "
-        "If no liked songs are provided, generate a random recommendation from an artist with fewer than 600,000 plays that is likely to appeal to a wide audience. "
-        "Do not include any explanation in your response. Respond only with the song title followed by a dash and the artist's name. For example: Songtitle-Artist.";
+        "Carefully analyze the user's preferences based on their liked songs, including genres, moods, tempos, and lyrical themes. "
+        "If no liked songs are provided, generate a random recommendation likely to appeal to a wide audience. "
+        "Do not include songs already in this list: $excludedSongs. "
+        "Respond only with the song title followed by a dash and the artist's name.";
 
     final userRanking = globalLikedSongs.asMap().entries.map((entry) {
       final index = entry.key + 1;
@@ -64,24 +69,37 @@ class _SongSwipePageState extends State<SongSwipePage> {
     }).join(", ");
 
     try {
-      final recommendation = await SongRecommendations.fetchRecommendation(
-        systemPrompt: systemPrompt,
-        userPrompt: "Based on the user's liked songs, recommend a new one.",
-        userRanking: userRanking,
-      );
+      Map<String, String>? recommendation;
 
-      final songDetails = await spotifyAPI.fetchSongDetails(
-        recommendation['song']!,
-        recommendation['artist']!,
-      );
+      // Attempt to fetch a valid recommendation
+      do {
+        recommendation = await SongRecommendations.fetchRecommendation(
+          systemPrompt: systemPrompt,
+          userPrompt: "Based on the user's liked songs, recommend a new one.",
+          userRanking: userRanking,
+        );
 
-      setState(() {
-        songs.add({
-          'title': songDetails['title'],
-          'artist': songDetails['artist'],
-          'image': songDetails['image'],
-        });
-      });
+        // Check if recommendation is already in the list
+        if (recommendation != null) {
+          final recommendedSong =
+              "${recommendation['song']}-${recommendation['artist']}";
+          if (!recommendedByGronq.contains(recommendedSong)) {
+            recommendedByGronq.add(recommendedSong); // Add to global list
+            final songDetails = await spotifyAPI.fetchSongDetails(
+              recommendation['song']!,
+              recommendation['artist']!,
+            );
+            setState(() {
+              songs.add({
+                'title': songDetails['title'],
+                'artist': songDetails['artist'],
+                'image': songDetails['image'],
+              });
+            });
+            break;
+          }
+        }
+      } while (recommendation != null);
     } catch (e) {
       print('Error fetching recommendation: $e');
     } finally {
@@ -108,6 +126,7 @@ class _SongSwipePageState extends State<SongSwipePage> {
       cardOffset = Offset.zero;
       cardAngle = 0;
       opacity = 1.0;
+      iconOpacity = 0.0;
       overlayIcon = null;
     });
 
@@ -116,6 +135,8 @@ class _SongSwipePageState extends State<SongSwipePage> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Color(0xFF282828),
@@ -149,6 +170,12 @@ class _SongSwipePageState extends State<SongSwipePage> {
                               cardAngle = cardOffset.dx * 0.002;
                               opacity =
                                   max(0.4, 1 - (cardOffset.dx.abs() / 300));
+
+                              // Adjust opacity to reach 100% faster
+                              iconOpacity =
+                                  (cardOffset.dx.abs() / (screenWidth * 0.5))
+                                      .clamp(0.0, 1.0);
+
                               overlayIcon = cardOffset.dx > 0
                                   ? "heart"
                                   : cardOffset.dx < 0
@@ -157,8 +184,7 @@ class _SongSwipePageState extends State<SongSwipePage> {
                             });
                           },
                           onPanEnd: (details) {
-                            final threshold =
-                                MediaQuery.of(context).size.width * 0.3;
+                            final threshold = screenWidth * 0.3;
                             if (cardOffset.dx > threshold) {
                               _handleSwipe(true);
                             } else if (cardOffset.dx < -threshold) {
@@ -168,6 +194,7 @@ class _SongSwipePageState extends State<SongSwipePage> {
                                 cardOffset = Offset.zero;
                                 cardAngle = 0;
                                 opacity = 1.0;
+                                iconOpacity = 0.0;
                                 overlayIcon = null;
                               });
                             }
@@ -240,14 +267,17 @@ class _SongSwipePageState extends State<SongSwipePage> {
                                         top:
                                             MediaQuery.of(context).size.height *
                                                 0.2,
-                                        child: Icon(
-                                          overlayIcon == "heart"
-                                              ? Icons.favorite
-                                              : Icons.clear,
-                                          color: overlayIcon == "heart"
-                                              ? Colors.green
-                                              : Colors.red,
-                                          size: 100,
+                                        child: Opacity(
+                                          opacity: iconOpacity,
+                                          child: Icon(
+                                            overlayIcon == "heart"
+                                                ? Icons.favorite
+                                                : Icons.clear,
+                                            color: overlayIcon == "heart"
+                                                ? Colors.green
+                                                : Colors.red,
+                                            size: 100,
+                                          ),
                                         ),
                                       ),
                                   ],
