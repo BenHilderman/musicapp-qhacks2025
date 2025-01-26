@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 
 class SongRecommendations {
   static const String apiKey =
-      "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";
+      "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";
   static const String model = "llama-3.3-70b-versatile";
 
   /// Fetch a song recommendation based on user inputs
