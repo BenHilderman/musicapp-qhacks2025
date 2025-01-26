@@ -52,6 +52,16 @@ class _AlbumDetailPageState extends State<AlbumDetailPage> {
     }
   }
 
+  Future<void> _submitRating() async {
+    // TODO: Implement database logic here
+    // You can use the `production`, `lyrics`, `flow`, `intangibles`, and `totalRating` variables.
+
+    print("Submitted rating:");
+    print(
+        "Production: $production, Lyrics: $lyrics, Flow: $flow, Intangibles: $intangibles");
+    print("Overall Rating: $totalRating");
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -139,12 +149,14 @@ class _AlbumDetailPageState extends State<AlbumDetailPage> {
                         ),
                       ),
                       SizedBox(height: 16),
-                      Text(
-                        'Rate this Album',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: textColor,
+                      Center(
+                        child: Text(
+                          'Your Overall Rating: ${totalRating.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            color: spotifyGreen,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       SizedBox(height: 16),
@@ -170,12 +182,18 @@ class _AlbumDetailPageState extends State<AlbumDetailPage> {
                       }, intangibles),
                       SizedBox(height: 16),
                       Center(
-                        child: Text(
-                          'Your Overall Rating: ${totalRating.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            color: spotifyGreen,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+                        child: ElevatedButton(
+                          onPressed: _submitRating,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: spotifyGreen,
+                          ),
+                          child: Text(
+                            'Submit Rating',
+                            style: TextStyle(
+                              color: darkBackground,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
                           ),
                         ),
                       ),
