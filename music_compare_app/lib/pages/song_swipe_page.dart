@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
+import 'package:music_compare_app/env.dart';
 import 'dart:io';
 import '../services/api_helper.dart'; // Spotify API helper
 import '../widgets/song_card.dart'; // Custom SongCard widget
@@ -12,6 +13,7 @@ class SongSwipePage extends StatefulWidget {
 class _SongSwipePageState extends State<SongSwipePage> {
   final SpotifyAPI spotifyAPI = SpotifyAPI(); // API instance
   List<Map<String, String>> songs = []; // List of songs
+  List<Map<String, String>> likedSongs = []; // List of liked songs
   bool isLoading = true; // Loading indicator
   final String playlistId = '3fxxZwjRv8M0NczIFykCc8'; // Playlist ID
 
@@ -99,6 +101,10 @@ class _SongSwipePageState extends State<SongSwipePage> {
         direction == CardSwiperDirection.right) {
       // Like action (swipe up or right)
       print("Liked: ${songs[index]['title']}");
+      likedSongs.add(songs[index]); // Add to local liked songs list
+      globalLikedSongs.add(songs[index]); // Add to global liked songs list
+      print("Added to global liked songs: ${songs[index]['title']}");
+      print("Global liked songs count: ${globalLikedSongs.length}");
       _showLikeAnimation();
     } else if (direction == CardSwiperDirection.bottom ||
         direction == CardSwiperDirection.left) {

@@ -319,11 +319,58 @@ class _ProfilePageState extends State<ProfilePage>
   }
 
   Widget _buildLikesTab() {
-    return const Center(
-      child: Text(
-        'Likes tab content goes here',
-        style: TextStyle(fontSize: 18, color: Colors.grey),
-      ),
+    // Log the initial state of the globalLikedSongs list
+    print(
+        "Building Likes Tab. Number of liked songs: ${globalLikedSongs.length}");
+
+    if (globalLikedSongs.isEmpty) {
+      print("No liked songs found. Displaying empty state message.");
+      return Center(
+        child: Text(
+          'No liked songs yet.',
+          style: TextStyle(fontSize: 18, color: Colors.grey[400]),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: globalLikedSongs.length,
+      itemBuilder: (context, index) {
+        final song = globalLikedSongs[index];
+
+        // Log details of each song being displayed
+        print("Displaying song #${index + 1}:");
+        print("  Title: ${song['title']}");
+        print("  Artist: ${song['artist']}");
+        print("  Image URL: ${song['image']}");
+
+        return Card(
+          color: const Color(0xFF282828),
+          margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+          child: ListTile(
+            leading: song['image'] != null && song['image']!.isNotEmpty
+                ? Image.network(
+                    song['image']!,
+                    width: 50,
+                    height: 50,
+                    fit: BoxFit.cover,
+                  )
+                : Icon(
+                    Icons.music_note,
+                    color: Colors.white,
+                    size: 50,
+                  ),
+            title: Text(
+              song['title'] ?? 'Unknown Title',
+              style: const TextStyle(color: Colors.white, fontSize: 18),
+            ),
+            subtitle: Text(
+              song['artist'] ?? 'Unknown Artist',
+              style: TextStyle(color: Colors.grey[400], fontSize: 14),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -369,7 +416,7 @@ class _ProfilePageState extends State<ProfilePage>
                       ),
                       SizedBox(height: 4),
                       Text(
-                        'Rated on: ${review['timestamp'].toLocal()}',
+                        'Rated on: ${review['timestamp']}',
                         style: TextStyle(color: Colors.grey[400], fontSize: 12),
                       ),
                     ],
