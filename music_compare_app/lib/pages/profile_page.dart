@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:music_compare_app/env.dart';
 import '../services/spotify_auth_service.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -39,6 +40,7 @@ class _ProfilePageState extends State<ProfilePage>
       final profileData = await widget.spotifyAuthService.getProfileData();
       final followingData = await widget.spotifyAuthService.getFollowing();
       await widget.spotifyAuthService.fetchUserPlaylists();
+
       setState(() {
         profilePictureUrl = profileData['profilePictureUrl'];
         profileName = profileData['displayName'];
@@ -46,7 +48,14 @@ class _ProfilePageState extends State<ProfilePage>
             widget.spotifyAuthService.userProfile?['followers']['total'];
         following = followingData;
         playlists = widget.spotifyAuthService.playlists;
+
+        // Save the email globally
+        spotifyUserEmail = profileData['email'];
+        print("Global Email Set: $spotifyUserEmail");
+        print("Profile Data: $profileData");
       });
+
+      print("Global Email Set: $spotifyUserEmail");
     } catch (e) {
       print('Error fetching profile data: $e');
     }
@@ -62,35 +71,34 @@ class _ProfilePageState extends State<ProfilePage>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Color(0xFF282828), // Spotify grey background
-        centerTitle: true, // Center the logo and text
+        backgroundColor: Color(0xFF282828),
+        centerTitle: true,
         title: Row(
-          mainAxisAlignment: MainAxisAlignment.center, // Center the content
-          mainAxisSize: MainAxisSize.min, // Shrink the row to content width
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Image.asset(
-              'assets/logo.png', // Replace with your actual logo path
-              height: 50, // Adjust logo size
+              'assets/logo.png',
+              height: 50,
               width: 50,
             ),
-            SizedBox(width: 10), // Spacing between logo and text
+            SizedBox(width: 10),
             RichText(
               text: TextSpan(
                 children: [
                   TextSpan(
-                    text: 'Spotter', // First part of the name
+                    text: 'Spotter',
                     style: TextStyle(
-                      color: Colors.white, // Spotify white for contrast
-                      fontSize: 24, // Larger text
-                      fontWeight: FontWeight.bold, // Bold for emphasis
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                   TextSpan(
-                    text: 'Box', // Second part in Spotify green
+                    text: 'Box',
                     style: TextStyle(
-                      color: Color(0xFF1DB954), // Spotify green for "Box"
-                      fontSize: 24, // Larger text
-                      fontWeight: FontWeight.bold, // Bold for emphasis
+                      color: Color(0xFF1DB954),
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ],
@@ -100,10 +108,9 @@ class _ProfilePageState extends State<ProfilePage>
         ),
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white, // White underline for active tab
-          labelColor: Colors.white, // White text for active tab
-          unselectedLabelColor:
-              Colors.grey[400], // Light grey for inactive tabs
+          indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.grey[400],
           tabs: [
             Tab(text: 'Overview'),
             Tab(text: 'Likes'),
@@ -117,7 +124,7 @@ class _ProfilePageState extends State<ProfilePage>
 
   Widget _buildProfileContent() {
     return Container(
-      color: Color(0xFF191414), // Spotify black background
+      color: Color(0xFF191414),
       child: Column(
         children: [
           if (profilePictureUrl != null)
@@ -133,7 +140,7 @@ class _ProfilePageState extends State<ProfilePage>
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white, // Spotify white text
+                  color: Colors.white,
                 ),
               ),
             ),
@@ -162,7 +169,7 @@ class _ProfilePageState extends State<ProfilePage>
               padding: const EdgeInsets.all(8.0),
               child: Text(
                 'Followers: $followersCount',
-                style: TextStyle(color: Colors.grey[400]), // Light grey text
+                style: TextStyle(color: Colors.grey[400]),
               ),
             ),
           Padding(
@@ -173,7 +180,7 @@ class _ProfilePageState extends State<ProfilePage>
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey[300], // Subtle grey
+                color: Colors.grey[300],
               ),
             ),
           ),
@@ -186,7 +193,7 @@ class _ProfilePageState extends State<ProfilePage>
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Colors.grey[300], // Subtle grey
+                color: Colors.grey[300],
               ),
             ),
           ),
@@ -200,8 +207,7 @@ class _ProfilePageState extends State<ProfilePage>
     return Center(
       child: Text(
         'Likes tab content goes here',
-        style:
-            TextStyle(fontSize: 18, color: Colors.grey[400]), // Light grey text
+        style: TextStyle(fontSize: 18, color: Colors.grey[400]),
       ),
     );
   }
@@ -210,19 +216,18 @@ class _ProfilePageState extends State<ProfilePage>
     return Center(
       child: Text(
         'Reviews tab content goes here',
-        style:
-            TextStyle(fontSize: 18, color: Colors.grey[400]), // Light grey text
+        style: TextStyle(fontSize: 18, color: Colors.grey[400]),
       ),
     );
   }
 
   Widget _buildSignInPrompt() {
     return Container(
-      color: Color(0xFF191414), // Spotify black background
+      color: Color(0xFF191414),
       child: Center(
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
-            backgroundColor: Color(0xFF1DB954), // Spotify green button
+            backgroundColor: Color(0xFF1DB954),
           ),
           onPressed: () async {
             await widget.signIn();
@@ -232,7 +237,7 @@ class _ProfilePageState extends State<ProfilePage>
           },
           child: Text(
             'Sign in to Spotify',
-            style: TextStyle(color: Colors.black), // Black text for contrast
+            style: TextStyle(color: Colors.black),
           ),
         ),
       ),
@@ -241,11 +246,10 @@ class _ProfilePageState extends State<ProfilePage>
 
   Widget _buildFollowingList() {
     return Container(
-      color: Color(0xFF282828), // Subtle grey background
+      color: Color(0xFF282828),
       child: ListView.builder(
         shrinkWrap: true,
-        physics:
-            NeverScrollableScrollPhysics(), // Allow embedding in scroll view
+        physics: NeverScrollableScrollPhysics(),
         itemCount: following.length,
         itemBuilder: (context, index) {
           return ListTile(
@@ -255,7 +259,7 @@ class _ProfilePageState extends State<ProfilePage>
             ),
             title: Text(
               following[index]['name']!,
-              style: TextStyle(color: Colors.grey[300]), // Lighter grey text
+              style: TextStyle(color: Colors.grey[300]),
             ),
           );
         },
@@ -265,17 +269,16 @@ class _ProfilePageState extends State<ProfilePage>
 
   Widget _buildPlaylistsList() {
     return Container(
-      color: Color(0xFF282828), // Subtle grey background
+      color: Color(0xFF282828),
       child: ListView.builder(
         shrinkWrap: true,
-        physics:
-            NeverScrollableScrollPhysics(), // Allow embedding in scroll view
+        physics: NeverScrollableScrollPhysics(),
         itemCount: playlists.length,
         itemBuilder: (context, index) {
           return ListTile(
             title: Text(
               playlists[index],
-              style: TextStyle(color: Colors.grey[300]), // Lighter grey text
+              style: TextStyle(color: Colors.grey[300]),
             ),
           );
         },

@@ -5,8 +5,25 @@ import 'pages/song_swipe_page.dart';
 import 'pages/song_search_page.dart';
 import 'pages/profile_page.dart';
 import 'services/spotify_auth_service.dart';
+import 'package:parse_server_sdk_flutter/parse_server_sdk_flutter.dart'; // Correct import
 
-void main() {
+Future<void> main() async {
+  // Ensure Flutter bindings are initialized
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final keyApplicationId = 'TzIHO5q1E6K6jVsYTMvL3eoCWLTkztT3JsJ8F770';
+  final keyClientKey = 'eFtlbDLK4mHiuHamZnbJESmwAaU6qcsgmwalCEVY';
+  final keyParseServerUrl = 'https://parseapi.back4app.com';
+
+  // Initialize Parse server
+  await Parse().initialize(
+    keyApplicationId,
+    keyParseServerUrl,
+    clientKey: keyClientKey,
+    autoSendSessionId: true,
+  );
+
+  // Run the app
   runApp(MusicCompareApp());
 }
 

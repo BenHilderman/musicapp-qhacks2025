@@ -257,8 +257,18 @@ class SpotifyAuthServiceMobile implements SpotifyAuthService {
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
+
+      // Safely extract email and profile picture URL
+      final email = data['email'] ?? 'No email available';
+      final profilePictureUrl =
+          (data['images'] != null && data['images'].isNotEmpty)
+              ? data['images'][0]['url']
+              : '';
+
       return {
-        'profilePictureUrl': data['images'][0]['url'] as String,
+        'email': email,
+        'profilePictureUrl': profilePictureUrl,
+        'displayName': data['display_name'] ?? 'No display name',
       };
     } else {
       print('Failed to load profile data: ${response.body}');

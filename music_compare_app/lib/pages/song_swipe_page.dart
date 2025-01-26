@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
+import 'dart:io';
 import '../services/api_helper.dart'; // Spotify API helper
 import '../widgets/song_card.dart'; // Custom SongCard widget
 
@@ -69,6 +70,45 @@ class _SongSwipePageState extends State<SongSwipePage> {
     });
   }
 
+  Future<void> _getNextSongRecommendation() async {
+    try {
+      final result =
+          await Process.run('python3', ['ari/extract_song_features.py']);
+      if (result.exitCode == 0) {
+        final output = result.stdout.trim();
+        final parts = output.split('|');
+        if (parts.length == 2) {
+          setState(() {
+            songs.add({
+              'title': parts[0],
+              'artist': parts[1],
+              'image': '', // Placeholder for image
+            });
+          });
+        }
+      } else {
+        print('Error running Python script: ${result.stderr}');
+      }
+    } catch (e) {
+      print('Error running Python script: $e');
+    }
+  }
+
+  void _handleSwipe(int index, CardSwiperDirection direction) {
+    if (direction == CardSwiperDirection.top ||
+        direction == CardSwiperDirection.right) {
+      // Like action (swipe up or right)
+      print("Liked: ${songs[index]['title']}");
+      _showLikeAnimation();
+    } else if (direction == CardSwiperDirection.bottom ||
+        direction == CardSwiperDirection.left) {
+      // Dislike action (swipe down or left)
+      print("Disliked: ${songs[index]['title']}");
+      _showDislikeAnimation();
+    }
+    _getNextSongRecommendation();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -132,18 +172,7 @@ class _SongSwipePageState extends State<SongSwipePage> {
                             );
                           }).toList(),
                           onSwipe: (index, direction) {
-                            if (direction == CardSwiperDirection.top ||
-                                direction == CardSwiperDirection.right) {
-                              // Like action (swipe up)
-                              print("Liked: ${songs[index]['title']}");
-                              _showLikeAnimation();
-                            } else if (direction ==
-                                    CardSwiperDirection.bottom ||
-                                direction == CardSwiperDirection.left) {
-                              // Dislike action (swipe down)
-                              print("Disliked: ${songs[index]['title']}");
-                              _showDislikeAnimation();
-                            }
+                            _handleSwipe(index, direction);
                           },
                           scale: 0.9, // Slight scaling for cards
                           padding: EdgeInsets.symmetric(horizontal: 20),
