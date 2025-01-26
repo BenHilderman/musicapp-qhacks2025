@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flip_card/flip_card.dart'; // Import the FlipCard package
 import '../services/api_helper.dart'; // Spotify API helper
 
 class AlbumDetailPage extends StatefulWidget {
@@ -20,9 +19,7 @@ class _AlbumDetailPageState extends State<AlbumDetailPage> {
   int flow = 50;
   int intangibles = 50;
 
-  double averageRating = 75.0; // Placeholder for average rating from others
   final SpotifyAPI spotifyAPI = SpotifyAPI();
-
   final Color spotifyGreen = Color(0xFF1DB954);
   final Color darkBackground = Color(0xFF191414);
   final Color darkCard = Color(0xFF282828);
@@ -173,12 +170,13 @@ class _AlbumDetailPageState extends State<AlbumDetailPage> {
                       }, intangibles),
                       SizedBox(height: 16),
                       Center(
-                        child: FlipCard(
-                          direction: FlipDirection.HORIZONTAL,
-                          front: _buildRatingCard('Your Rating',
-                              '${totalRating.toStringAsFixed(2)}'),
-                          back: _buildRatingCard('Average Rating',
-                              '${averageRating.toStringAsFixed(2)}'),
+                        child: Text(
+                          'Your Overall Rating: ${totalRating.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            color: spotifyGreen,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ],
@@ -207,42 +205,6 @@ class _AlbumDetailPageState extends State<AlbumDetailPage> {
           onChanged: onChanged,
         ),
       ],
-    );
-  }
-
-  Widget _buildRatingCard(String title, String rating) {
-    return Card(
-      color: darkCard,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16.0),
-      ),
-      child: Container(
-        width: 150,
-        height: 100,
-        padding: EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              title,
-              style: TextStyle(
-                color: textColor,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 8),
-            Text(
-              rating,
-              style: TextStyle(
-                color: spotifyGreen,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
