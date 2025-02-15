@@ -12,7 +12,6 @@ class SongRecommendations {
     required String userPrompt,
     required String userRanking,
   }) async {
-    // Update this to match the correct API endpoint
     final uri = Uri.parse("https://api.groq.com/openai/v1/chat/completions");
 
     final headers = {
@@ -33,11 +32,8 @@ class SongRecommendations {
 
     try {
       final response = await http.post(uri, headers: headers, body: body);
-
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
-        // Safeguard: Ensure `choices` and `message` keys exist
+        final data = json.decode(response.body);
         if (data["choices"] == null ||
             data["choices"].isEmpty ||
             data["choices"][0]["message"] == null) {
@@ -45,13 +41,22 @@ class SongRecommendations {
         }
 
         final output = data["choices"][0]["message"]["content"] as String;
+        print("LLM Output: $output");
 
-        // Split the response into song and artist
-        final parts = output.split("-");
-        if (parts.length == 2) {
+        // Regex to find final "Song - Artist"
+        final pattern = RegExp(r'([\s\S]+)-([\s\S]+)$');
+        final match = pattern.firstMatch(output.trim());
+
+        if (match != null) {
+          final songPart = match.group(1)?.trim() ?? "";
+          final artistPart = match.group(2)?.trim() ?? "";
+
+          if (songPart.isEmpty || artistPart.isEmpty) {
+            throw Exception("Invalid response format: $output");
+          }
           return {
-            "song": parts[0].trim(),
-            "artist": parts[1].trim(),
+            "song": songPart,
+            "artist": artistPart,
           };
         } else {
           throw Exception("Invalid response format: $output");

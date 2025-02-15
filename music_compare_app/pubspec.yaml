@@ -10,15 +10,16 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_card_swiper: ^2.0.4
+  audioplayers: ^5.2.1
+  flutter_card_swiper: ^7.0.2
   flutter_appauth: ^8.0.3
   http: ^0.13.6
   cupertino_icons: ^1.0.8
   url_launcher: ^6.0.20
-  card_swiper: ^2.0.4
+  card_swiper: ^3.0.1
   uni_links: ^0.5.1
   flip_card: ^0.7.0
-  parse_server_sdk_flutter: ^7.0.0
+  parse_server_sdk_flutter: ^9.0.0
   flutter_dotenv: ^5.0.2
   intl: ^0.20.2
 
