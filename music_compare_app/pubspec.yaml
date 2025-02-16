@@ -33,3 +33,4 @@ flutter:
 
   assets:
     - assets/logo.png
+    - assets/default_album_art.png

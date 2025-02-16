@@ -1,11 +1,13 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/api_helper.dart'; // Spotify API helper
 import '../services/song_recommendations.dart'; // LLM-based recommendations
 import '../env.dart'; // Global variables like globalLikedSongs, etc.
 
-// Tracks recommended songs to avoid duplicates
+// Global list to track recommended songs (to avoid duplicates)
 List<String> recommendedByGronq = [];
 bool isFirstTimeSwipePage = true;
 
@@ -14,13 +16,14 @@ class SongSwipePage extends StatefulWidget {
   _SongSwipePageState createState() => _SongSwipePageState();
 }
 
-class _SongSwipePageState extends State<SongSwipePage> {
+class _SongSwipePageState extends State<SongSwipePage>
+    with SingleTickerProviderStateMixin {
   final SpotifyAPI spotifyAPI = SpotifyAPI();
   final AudioPlayer _audioPlayer = AudioPlayer();
 
-  // The stack of songs to display (each: {title, artist, image, previewUrl})
+  // List of songs to display (each song is a map with keys: title, artist, image, previewUrl)
   List<Map<String, String>> songs = [];
-  // Locally liked songs, in addition to the globalLikedSongs
+  // Locally liked songs (globalLikedSongs is maintained in env.dart)
   List<Map<String, String>> likedSongs = [];
 
   bool isLoading = true;
@@ -29,6 +32,7 @@ class _SongSwipePageState extends State<SongSwipePage> {
   // Audio player states
   bool _isPlaying = false;
   String? _currentPreviewUrl;
+  bool _isSongFinished = false;
 
   // Swipe animation states
   Offset cardOffset = Offset.zero;
@@ -37,35 +41,81 @@ class _SongSwipePageState extends State<SongSwipePage> {
   double iconOpacity = 0.0;
   String? overlayIcon; // "heart" or "cross"
 
+  // Filter state (without a search field)
+  Set<String> selectedFilters = {};
+  List<String> availableFilters = [
+    "Rap",
+    "Country",
+    "Rock",
+    "Pop",
+    "Sad",
+    "Upbeat",
+    "Chill",
+    "Acoustic",
+    "Hip-Hop",
+    "Jazz",
+    "Electronic",
+    "Classical",
+    "Indie",
+    "Metal",
+    "Reggae",
+    "R&B",
+    "Soul",
+    "Funk",
+    "Alternative",
+    "Punk",
+  ];
+
+  // Productivity state variables
+  int dailySwipeCount = 0;
+  final int dailySwipeGoal = 10;
+  int swipeStreak = 0;
+  final List<int> likedMilestones = [5, 10, 20, 50];
+
+  // Milestone celebration state variables
+  bool showMilestoneCelebration = false;
+  String milestoneMessage = "";
+  double _milestoneOpacity = 0.0;
+
+  late TabController _tabController;
+
   @override
   void initState() {
     super.initState();
     _fetchFirstSong();
+    _tabController = TabController(length: 2, vsync: this);
   }
 
   @override
   void dispose() {
     _audioPlayer.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
-  /// First recommendation fetch on page load
+  /// Fetch the first song recommendation on page load.
   Future<void> _fetchFirstSong() async {
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+    });
     try {
       await _getNextSongRecommendation();
     } catch (e) {
       print("Error fetching first recommendation: $e");
     } finally {
-      setState(() => isLoading = false);
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+      });
     }
   }
 
-  /// Fetch the next recommended track from LLM + Spotify,
-  /// then auto-play the new top card if it exists.
+  /// Fetch the next song recommendation from the LLM and Spotify.
   Future<void> _getNextSongRecommendation() async {
     if (isFetchingRecommendation) return;
-    setState(() => isFetchingRecommendation = true);
+    setState(() {
+      isFetchingRecommendation = true;
+    });
 
     final excluded = recommendedByGronq.join(', ');
     final systemPrompt =
@@ -74,7 +124,6 @@ class _SongSwipePageState extends State<SongSwipePage> {
         "If none liked, pick a random. Don't include: $excluded. "
         "Respond only: song - artist.";
 
-    // Build a comma-separated list of liked songs for userRanking
     final userRanking = globalLikedSongs.asMap().entries.map((entry) {
       final idx = entry.key + 1;
       final song = entry.value['title'] ?? "Unknown Title";
@@ -92,17 +141,13 @@ class _SongSwipePageState extends State<SongSwipePage> {
       if (recommendation != null) {
         final combined =
             "${recommendation['song']}-${recommendation['artist']}";
-
-        // Avoid duplicates
         if (!recommendedByGronq.contains(combined)) {
           recommendedByGronq.add(combined);
-
-          // Fetch actual track details from Spotify
           final track = await spotifyAPI.fetchSongDetails(
             recommendation['song']!,
             recommendation['artist']!,
           );
-
+          if (!mounted) return;
           setState(() {
             songs.add({
               'title': track['title'],
@@ -111,77 +156,77 @@ class _SongSwipePageState extends State<SongSwipePage> {
               'previewUrl': track['previewUrl'] ?? '',
             });
           });
-
-          // Auto-play the top card's preview
           _autoPlayTopSong();
         } else {
           print("Skipping duplicate recommendation: $combined");
+          Future.delayed(Duration(milliseconds: 500), () {
+            if (mounted) _getNextSongRecommendation();
+          });
         }
       }
     } catch (err) {
       print("Error fetching recommendation: $err");
     } finally {
-      setState(() => isFetchingRecommendation = false);
+      if (!mounted) return;
+      setState(() {
+        isFetchingRecommendation = false;
+      });
     }
   }
 
-  /// Automatically plays the top card's previewUrl (if any).
+  /// Automatically play the top song's preview.
   Future<void> _autoPlayTopSong() async {
     if (songs.isEmpty) return;
-
-    // The topmost card is index 0
     final topSong = songs[0];
     final previewUrl = topSong['previewUrl'] ?? '';
-
-    // Stop the old track if needed
     await _audioPlayer.stop();
     _isPlaying = false;
     _currentPreviewUrl = null;
-
     if (previewUrl.isEmpty) {
-      // If there's no preview, do nothing (or show a snack bar if you want).
       print("Auto-play skipped: No preview for '${topSong['title']}'");
       return;
     }
-
-    // Play the new snippet
     print(
         "Auto-playing preview for '${topSong['title']}' by '${topSong['artist']}'");
     await _audioPlayer.play(UrlSource(previewUrl));
+    if (!mounted) return;
     setState(() {
       _isPlaying = true;
       _currentPreviewUrl = previewUrl;
     });
   }
 
-  /// Called when user swipes left (dislike) or right (like)
+  /// Handle swipe action.
   void _handleSwipe(bool isLiked) {
     if (songs.isEmpty) return;
 
-    // Dismiss tutorial overlay on first swipe
-    if (isFirstTimeSwipePage) {
-      setState(() => isFirstTimeSwipePage = false);
+    setState(() {
+      dailySwipeCount++;
+      swipeStreak++;
+    });
+    if (dailySwipeCount == dailySwipeGoal) {
+      _showDailyGoalDialog();
     }
-
-    // Remove top card
+    if (isFirstSwipe()) {
+      setState(() {
+        isFirstTimeSwipePage = false;
+      });
+    }
     final swipedSong = songs.removeAt(0);
-
-    // If it was playing, stop
     if (_isPlaying && _currentPreviewUrl == swipedSong['previewUrl']) {
       _audioPlayer.stop();
       _isPlaying = false;
     }
-
-    // Record like/dislike
     if (isLiked) {
       likedSongs.add(swipedSong);
       globalLikedSongs.add(swipedSong);
       print("Liked: ${swipedSong['title']} by ${swipedSong['artist']}");
+      if (likedMilestones.contains(globalLikedSongs.length)) {
+        _triggerMilestoneCelebration(globalLikedSongs.length);
+      }
     } else {
       print("Disliked: ${swipedSong['title']} by ${swipedSong['artist']}");
     }
-
-    // Reset card offsets
     setState(() {
       cardOffset = Offset.zero;
       cardAngle = 0;
@@ -189,135 +234,190 @@ class _SongSwipePageState extends State<SongSwipePage> {
       iconOpacity = 0.0;
       overlayIcon = null;
     });
-
-    // Request next recommendation
     _getNextSongRecommendation();
-
-    // If there's still a card on top, auto-play it
-    // (In case the user had multiple songs queued up.)
     if (songs.isNotEmpty) {
       _autoPlayTopSong();
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
+  bool isFirstSwipe() => isFirstTimeSwipePage;
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          Column(
+  /// Trigger a celebratory milestone overlay that fades out.
+  void _triggerMilestoneCelebration(int count) {
+    setState(() {
+      showMilestoneCelebration = true;
+      _milestoneOpacity = 1.0;
+      milestoneMessage = "$count Songs Discovered! 🎉";
+    });
+    Future.delayed(Duration(seconds: 2), () {
+      if (!mounted) return;
+      setState(() {
+        _milestoneOpacity = 0.0;
+      });
+    });
+  }
+
+  /// Show a non-blocking notification when the daily swipe goal is reached.
+  void _showDailyGoalDialog() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            "Daily goal reached! You've discovered $dailySwipeGoal tracks today!"),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  /// Show the productivity dashboard.
+  void _showDashboard() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return Container(
+          color: Color(0xFF282828),
+          padding: EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // App bar / top area
-              Container(
-                color: Color(0xFF282828),
-                padding: EdgeInsets.symmetric(vertical: 10),
-                child: SafeArea(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Image.asset(
-                        'assets/logo.png',
-                        width: 50,
-                        height: 50,
-                      ),
-                      SizedBox(width: 10),
-                      RichText(
-                        text: TextSpan(
-                          children: [
-                            TextSpan(
-                              text: 'Spotter',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            TextSpan(
-                              text: 'Box',
-                              style: TextStyle(
-                                color: Color(0xFF1DB954),
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // "Discover New Music" banner
-              Container(
-                width: double.infinity,
-                color: Color(0xFF282828),
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Center(
-                  child: Text(
-                    "Discover New Music",
-                    style: TextStyle(
+              Text("Productivity Dashboard",
+                  style: TextStyle(
                       color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-
-              // Main area
-              Expanded(
-                child: isLoading
-                    ? Center(child: CircularProgressIndicator())
-                    : _buildSwipeStack(screenWidth),
-              ),
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text("Total Liked Songs: ${globalLikedSongs.length}",
+                  style: TextStyle(color: Colors.white)),
+              Text("Today's Swipes: $dailySwipeCount / $dailySwipeGoal",
+                  style: TextStyle(color: Colors.white)),
+              Text("Swipe Streak: $swipeStreak",
+                  style: TextStyle(color: Colors.white)),
+              SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                child: Text("Close"),
+              )
             ],
           ),
+        );
+      },
+    );
+  }
 
-          // The tutorial overlay
-          if (isFirstTimeSwipePage)
-            Positioned.fill(
-              child: IgnorePointer(
-                ignoring: true,
-                child: Container(
-                  color: Colors.black45,
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.arrow_back, color: Colors.white, size: 50),
-                        Text(
-                          'Swipe Right to Like',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Swipe Left to Dislike',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Icon(Icons.arrow_forward,
-                            color: Colors.white, size: 50),
-                      ],
-                    ),
-                  ),
+  /// Add track to Spotify playlist.
+  Future<void> _addTrackToPlaylist(String trackId) async {
+    if (trackId.isEmpty) return;
+    try {
+      await spotifyAPI.addTrackToPlaylist("YOUR_PLAYLIST_ID", trackId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Track added to your playlist!')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to add track: $e')),
+      );
+    }
+  }
+
+  /// Open track in Spotify.
+  Future<void> _openInSpotify(String trackId) async {
+    if (trackId.isEmpty) return;
+    final url = Uri.parse('https://open.spotify.com/track/$trackId');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cannot open Spotify link')),
+      );
+    }
+  }
+
+  /// "Super Like" a track.
+  Future<void> _handleSuperLike(int cardIndex) async {
+    if (cardIndex < 0 || cardIndex >= songs.length) return;
+    final superLikedSong = songs[cardIndex];
+    likedSongs.add(superLikedSong);
+    globalLikedSongs.add(superLikedSong);
+    print(
+        "Super Liked: ${superLikedSong['title']} by ${superLikedSong['artist']}!!!");
+    setState(() {
+      songs.removeAt(cardIndex);
+      cardOffset = Offset.zero;
+      cardAngle = 0;
+      opacity = 1.0;
+      iconOpacity = 0.0;
+      overlayIcon = null;
+    });
+    if (songs.isNotEmpty) {
+      _autoPlayTopSong();
+    }
+    _getNextSongRecommendation();
+  }
+
+  /// Replay snippet of the top song.
+  Future<void> _replaySnippet(String previewUrl) async {
+    await _audioPlayer.stop();
+    setState(() {
+      _isPlaying = true;
+      _isSongFinished = false;
+    });
+    try {
+      await _audioPlayer.play(UrlSource(previewUrl));
+    } catch (e) {
+      print("Replay error: $e");
+    }
+  }
+
+  /// Build the filter chips row.
+  Widget _buildFilterChips() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          ...availableFilters.map<Widget>((f) {
+            final isSelected = selectedFilters.contains(f);
+            return Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4),
+              child: ChoiceChip(
+                label: Text(f),
+                selected: isSelected,
+                onSelected: (val) {
+                  setState(() {
+                    if (val) {
+                      selectedFilters.add(f);
+                    } else {
+                      selectedFilters.remove(f);
+                    }
+                  });
+                },
+                backgroundColor: Colors.grey[800],
+                selectedColor: Colors.green[700],
+                labelStyle: TextStyle(
+                  color: isSelected ? Colors.white : Colors.grey[300],
                 ),
               ),
+            );
+          }).toList(),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4),
+            child: TextButton(
+              onPressed: () {
+                setState(() {
+                  selectedFilters.clear();
+                });
+              },
+              child: Text("Clear", style: TextStyle(color: Colors.white)),
             ),
+          ),
         ],
       ),
     );
   }
 
+  /// Build the swipe stack for song cards.
   Widget _buildSwipeStack(double screenWidth) {
     if (songs.isEmpty) {
       return Center(
@@ -327,7 +427,6 @@ class _SongSwipePageState extends State<SongSwipePage> {
         ),
       );
     }
-    // Use a Stack so each card can be a Positioned child
     return Stack(
       children: [
         for (int i = 0; i < songs.length; i++)
@@ -337,12 +436,10 @@ class _SongSwipePageState extends State<SongSwipePage> {
                 setState(() {
                   cardOffset += details.delta;
                   cardAngle = cardOffset.dx * 0.002;
-                  // Fade out if user swipes horizontally
                   opacity =
                       max(0.4, 1 - (cardOffset.dx.abs() / (screenWidth * 0.6)));
                   iconOpacity = (cardOffset.dx.abs() / (screenWidth * 0.5))
                       .clamp(0.0, 1.0);
-
                   if (cardOffset.dx > 0) {
                     overlayIcon = "heart";
                   } else if (cardOffset.dx < 0) {
@@ -355,13 +452,10 @@ class _SongSwipePageState extends State<SongSwipePage> {
               onPanEnd: (details) {
                 final threshold = screenWidth * 0.3;
                 if (cardOffset.dx > threshold) {
-                  // Swiped right => like
                   _handleSwipe(true);
                 } else if (cardOffset.dx < -threshold) {
-                  // Swiped left => dislike
                   _handleSwipe(false);
                 } else {
-                  // Not far enough => snap back
                   setState(() {
                     cardOffset = Offset.zero;
                     cardAngle = 0;
@@ -377,9 +471,7 @@ class _SongSwipePageState extends State<SongSwipePage> {
                   angle: (i == 0) ? cardAngle : 0,
                   child: Opacity(
                     opacity: (i == 0) ? opacity : 1.0,
-                    child: Center(
-                      child: _buildSongCard(i),
-                    ),
+                    child: Center(child: _buildSongCard(i)),
                   ),
                 ),
               ),
@@ -389,11 +481,21 @@ class _SongSwipePageState extends State<SongSwipePage> {
     );
   }
 
+  /// Build an individual song card.
   Widget _buildSongCard(int i) {
+    final trackId = songs[i]['id'] ?? '';
+    final trackTitle = songs[i]['title'] ?? 'Unknown Title';
+    final trackArtist = songs[i]['artist'] ?? 'Unknown Artist';
+    final trackImage = songs[i]['image'] ?? 'assets/default_album_art.png';
+    final previewUrl = songs[i]['previewUrl'] ?? '';
+
+    final imageProvider = trackImage.startsWith('http')
+        ? NetworkImage(trackImage)
+        : AssetImage(trackImage) as ImageProvider;
+
     return Stack(
       alignment: Alignment.center,
       children: [
-        // Card content
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -404,41 +506,67 @@ class _SongSwipePageState extends State<SongSwipePage> {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black38,
-                    blurRadius: 10,
-                    offset: Offset(0, 5),
-                  ),
+                      color: Colors.black38,
+                      blurRadius: 10,
+                      offset: Offset(0, 5)),
                 ],
                 image: DecorationImage(
-                  image: NetworkImage(
-                    songs[i]['image'] ?? 'assets/images/default_album_art.png',
-                  ),
+                  image: imageProvider,
                   fit: BoxFit.cover,
                 ),
               ),
             ),
             SizedBox(height: 10),
             Text(
-              songs[i]['title'] ?? "Unknown Title",
+              trackTitle,
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white),
             ),
             Text(
-              songs[i]['artist'] ?? "Unknown Artist",
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[400],
-              ),
+              trackArtist,
+              style: TextStyle(fontSize: 14, color: Colors.grey[400]),
             ),
-            // No "Play Button"—auto playback in _autoPlayTopSong()
+            SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: Icon(Icons.queue_music, color: Colors.white),
+                  tooltip: "Add to your Spotify playlist",
+                  onPressed: trackId.isEmpty
+                      ? null
+                      : () => _addTrackToPlaylist(trackId),
+                ),
+                SizedBox(width: 16),
+                IconButton(
+                  icon: Icon(Icons.open_in_new, color: Colors.white),
+                  tooltip: "Open in Spotify",
+                  onPressed:
+                      trackId.isEmpty ? null : () => _openInSpotify(trackId),
+                ),
+                SizedBox(width: 16),
+                _isSongFinished && songs.indexOf(songs[0]) == 0
+                    ? IconButton(
+                        icon: Icon(Icons.replay, color: Colors.blue),
+                        tooltip: "Replay Snippet",
+                        onPressed: () {
+                          if (previewUrl.isNotEmpty) {
+                            _replaySnippet(previewUrl);
+                          }
+                        },
+                      )
+                    : IconButton(
+                        icon: Icon(Icons.star, color: Colors.yellow),
+                        tooltip: "Super Like",
+                        onPressed: () => _handleSuperLike(i),
+                      ),
+              ],
+            ),
             SizedBox(height: 16),
           ],
         ),
-
-        // Like/Dislike overlay for the top card
         if (i == 0 && overlayIcon != null)
           Positioned(
             top: 50,
@@ -454,4 +582,173 @@ class _SongSwipePageState extends State<SongSwipePage> {
       ],
     );
   }
+
+  /// Build the main content using a TabBarView with swiping disabled.
+  Widget buildMainContent(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    return Stack(
+      children: [
+        TabBarView(
+          physics: NeverScrollableScrollPhysics(),
+          controller: _tabController,
+          children: [
+            // Discover tab: includes filter chips and swipe view.
+            Column(
+              children: [
+                _buildFilterChips(),
+                Expanded(child: _buildSwipeStack(screenWidth)),
+              ],
+            ),
+            // Trending tab: placeholder.
+            _buildTrendingTab(),
+          ],
+        ),
+        // Milestone celebration overlay that fades out.
+        if (showMilestoneCelebration)
+          Positioned.fill(
+            child: AnimatedOpacity(
+              opacity: _milestoneOpacity,
+              duration: Duration(seconds: 2),
+              onEnd: () {
+                if (_milestoneOpacity == 0.0) {
+                  setState(() {
+                    showMilestoneCelebration = false;
+                  });
+                }
+              },
+              child: Container(
+                color: Colors.black45,
+                child: CustomPaint(
+                  painter: _ConfettiPainter(),
+                  child: Center(
+                    child: Text(
+                      milestoneMessage,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Build the Trending tab.
+  Widget _buildTrendingTab() {
+    return Center(
+      child: Text(
+        "Trending songs coming soon!",
+        style: TextStyle(color: Colors.grey[300], fontSize: 18),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        // Remove default leading to center the title.
+        leading: Container(),
+        backgroundColor: Color(0xFF282828),
+        centerTitle: true,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Smaller logo and no spacing between logo and text.
+            Image.asset('assets/logo.png', width: 35, height: 35),
+            RichText(
+              text: TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'potter',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 23,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  TextSpan(
+                    text: 'Box',
+                    style: TextStyle(
+                      color: Color(0xFF1DB954),
+                      fontSize: 23,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.dashboard, color: Colors.white),
+            onPressed: _showDashboard,
+          )
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.grey[400],
+          tabs: const [
+            Tab(text: 'Discover'),
+            Tab(text: 'Trending'),
+          ],
+        ),
+      ),
+      body: buildMainContent(context),
+    );
+  }
+}
+
+/// A confetti painter that draws rotated rectangles for a realistic celebratory effect.
+class _ConfettiPainter extends CustomPainter {
+  final Random _random = Random();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final count = 150;
+    for (int i = 0; i < count; i++) {
+      final width = 4 + _random.nextDouble() * 4; // 4 to 8
+      final height = 2 + _random.nextDouble() * 2; // 2 to 4
+      final x = _random.nextDouble() * size.width;
+      final y = _random.nextDouble() * size.height;
+      final angle = _random.nextDouble() * 2 * pi;
+      final color = HSVColor.fromAHSV(
+        1,
+        _random.nextDouble() * 360,
+        0.8 + _random.nextDouble() * 0.2,
+        0.8 + _random.nextDouble() * 0.2,
+      ).toColor();
+
+      final paint = Paint()..color = color;
+
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.rotate(angle);
+      final rect =
+          Rect.fromCenter(center: Offset.zero, width: width, height: height);
+      canvas.drawRect(rect, paint);
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ConfettiPainter oldDelegate) => true;
+}
+
+void main() {
+  runApp(MaterialApp(
+    title: 'Song Recommendations',
+    theme: ThemeData.dark(),
+    home: SongSwipePage(),
+  ));
 }
