@@ -1,7 +1,7 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async';
-import 'package:url_launcher/url_launcher.dart'; // Import url_launcher
+import 'package:url_launcher/url_launcher.dart';
 import 'spotify_auth_service.dart';
 
 class SpotifyAuthServiceMobile implements SpotifyAuthService {
@@ -16,9 +16,13 @@ class SpotifyAuthServiceMobile implements SpotifyAuthService {
   final String _scopes =
       'user-read-private user-read-email playlist-read-private playlist-modify-private playlist-modify-public user-library-read user-library-modify user-follow-read';
 
+  // Define _baseUrl as a private field.
+  final String _baseUrl = 'https://api.spotify.com/v1';
+
   String? _accessToken;
   Map<String, dynamic>? _userProfile;
-  List<String> _playlists = [];
+  // Change playlists to a list of maps with keys 'id' and 'name'
+  List<Map<String, String>> _playlists = [];
 
   @override
   Future<void> signIn() async {
@@ -29,7 +33,6 @@ class SpotifyAuthServiceMobile implements SpotifyAuthService {
       'scope': _scopes,
     });
 
-    // Open the URL in the default browser
     if (await canLaunch(url.toString())) {
       await launch(url.toString(), forceSafariVC: false, forceWebView: false);
     } else {
@@ -61,38 +64,34 @@ class SpotifyAuthServiceMobile implements SpotifyAuthService {
         'client_secret': _clientSecret,
       },
     );
-
     if (response.statusCode == 200) {
-      final accessToken = jsonDecode(response.body)['access_token'];
-      print('Access Token obtained: $accessToken');
-      _accessToken = accessToken; // Ensure the access token is set
-      return accessToken;
+      final data = jsonDecode(response.body);
+      _accessToken = data['access_token'];
+      print('Access Token obtained: $_accessToken');
+      return _accessToken;
     } else {
       print('Failed to get access token: ${response.body}');
       return null;
     }
   }
 
+  /// Helper method to ensure an access token is available.
+  Future<String> _ensureAccessToken() async {
+    if (_accessToken != null) return _accessToken!;
+    throw Exception("Access token is null. User must sign in.");
+  }
+
   @override
   Future<void> fetchUserProfile() async {
-    if (_accessToken == null) {
-      print('Access token is null. Cannot fetch user profile.');
-      return;
-    }
-
+    final token = await _ensureAccessToken();
     final response = await http.get(
       Uri.parse('https://api.spotify.com/v1/me'),
-      headers: {
-        'Authorization': 'Bearer $_accessToken',
-      },
+      headers: {'Authorization': 'Bearer $token'},
     );
-
     if (response.statusCode == 401) {
-      // Handle unauthorized error
       print('Unauthorized: ${response.body}');
       return;
     }
-
     _userProfile = jsonDecode(response.body);
     print('User Profile: $_userProfile');
   }
@@ -102,18 +101,11 @@ class SpotifyAuthServiceMobile implements SpotifyAuthService {
     required String type,
     int limit = 10,
   }) async {
-    if (_accessToken == null) {
-      throw Exception('Access token is null. Cannot search Spotify.');
-    }
-
+    final token = await _ensureAccessToken();
     final response = await http.get(
-      Uri.parse(
-          'https://api.spotify.com/v1/search?q=$query&type=$type&limit=$limit'),
-      headers: {
-        'Authorization': 'Bearer $_accessToken',
-      },
+      Uri.parse('$_baseUrl/search?q=$query&type=$type&limit=$limit'),
+      headers: {'Authorization': 'Bearer $token'},
     );
-
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return (data['tracks']['items'] as List).map((item) {
@@ -136,52 +128,37 @@ class SpotifyAuthServiceMobile implements SpotifyAuthService {
 
   @override
   Future<void> fetchUserPlaylists() async {
-    if (_accessToken == null) {
-      print('Access token is null. Cannot fetch user playlists.');
-      return;
-    }
-
+    final token = await _ensureAccessToken();
     final response = await http.get(
       Uri.parse('https://api.spotify.com/v1/me/playlists'),
-      headers: {
-        'Authorization': 'Bearer $_accessToken',
-      },
+      headers: {'Authorization': 'Bearer $token'},
     );
-
     if (response.statusCode == 401) {
-      // Handle unauthorized error
       print('Unauthorized: ${response.body}');
       return;
     }
-
     final data = jsonDecode(response.body);
     _playlists = [];
     for (var item in data['items']) {
-      _playlists.add(item['name']);
+      _playlists.add({
+        'id': item['id'],
+        'name': item['name'],
+      });
     }
     print('User Playlists: $_playlists');
   }
 
   @override
   Future<List<String>> fetchSongs() async {
-    if (_accessToken == null) {
-      print('Access token is null. Cannot fetch songs.');
-      return [];
-    }
-
+    final token = await _ensureAccessToken();
     final response = await http.get(
       Uri.parse('https://api.spotify.com/v1/me/tracks'),
-      headers: {
-        'Authorization': 'Bearer $_accessToken',
-      },
+      headers: {'Authorization': 'Bearer $token'},
     );
-
     if (response.statusCode == 401) {
-      // Handle unauthorized error
       print('Unauthorized: ${response.body}');
       return [];
     }
-
     final data = jsonDecode(response.body);
     final List<String> songs = [];
     for (var item in data['items']) {
@@ -192,19 +169,15 @@ class SpotifyAuthServiceMobile implements SpotifyAuthService {
 
   @override
   Future<void> saveSong(String songId) async {
-    if (_accessToken == null) {
-      print('Access token is null. Cannot save song.');
-      return;
-    }
-
+    final token = await _ensureAccessToken();
     await http.put(
       Uri.parse('https://api.spotify.com/v1/me/tracks'),
       headers: {
-        'Authorization': 'Bearer $_accessToken',
+        'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
       },
       body: jsonEncode({
-        'ids': [songId],
+        'ids': [songId]
       }),
     );
   }
@@ -217,17 +190,11 @@ class SpotifyAuthServiceMobile implements SpotifyAuthService {
 
   @override
   Future<List<Map<String, String>>> getFollowing() async {
-    if (_accessToken == null) {
-      throw Exception('Access token is null. Cannot fetch following.');
-    }
-
+    final token = await _ensureAccessToken();
     final response = await http.get(
       Uri.parse('https://api.spotify.com/v1/me/following?type=artist'),
-      headers: {
-        'Authorization': 'Bearer $_accessToken',
-      },
+      headers: {'Authorization': 'Bearer $token'},
     );
-
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
       return (data['artists']['items'] as List)
@@ -244,27 +211,18 @@ class SpotifyAuthServiceMobile implements SpotifyAuthService {
 
   @override
   Future<Map<String, String>> getProfileData() async {
-    if (_accessToken == null) {
-      throw Exception('Access token is null. Cannot fetch profile data.');
-    }
-
+    final token = await _ensureAccessToken();
     final response = await http.get(
       Uri.parse('https://api.spotify.com/v1/me'),
-      headers: {
-        'Authorization': 'Bearer $_accessToken',
-      },
+      headers: {'Authorization': 'Bearer $token'},
     );
-
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
-
-      // Safely extract email and profile picture URL
       final email = data['email'] ?? 'No email available';
       final profilePictureUrl =
           (data['images'] != null && data['images'].isNotEmpty)
               ? data['images'][0]['url']
               : '';
-
       return {
         'email': email,
         'profilePictureUrl': profilePictureUrl,
@@ -279,7 +237,21 @@ class SpotifyAuthServiceMobile implements SpotifyAuthService {
   @override
   Map<String, dynamic>? get userProfile => _userProfile;
   @override
-  List<String> get playlists => _playlists;
+  List<Map<String, String>> get playlists => _playlists;
+
+  @override
+  Future<void> addTrackToPlaylist(String playlistId, String trackId) async {
+    final token = await _ensureAccessToken();
+    final url = Uri.parse(
+        '$_baseUrl/playlists/$playlistId/tracks?uris=spotify:track:$trackId');
+    final response =
+        await http.post(url, headers: {'Authorization': 'Bearer $token'});
+    if (response.statusCode == 201 || response.statusCode == 200) {
+      print("Track $trackId added to playlist $playlistId");
+    } else {
+      throw Exception('Failed to add track to playlist: ${response.body}');
+    }
+  }
 }
 
 SpotifyAuthService createSpotifyAuthService() => SpotifyAuthServiceMobile();
